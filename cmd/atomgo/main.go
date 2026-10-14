@@ -27,6 +27,7 @@ import (
 	"github.com/atomlust/atomgo/internal/approval"
 	"github.com/atomlust/atomgo/internal/artifactstore"
 	"github.com/atomlust/atomgo/internal/audit"
+	"github.com/atomlust/atomgo/internal/livecache"
 	"github.com/atomlust/atomgo/internal/auth"
 	"github.com/atomlust/atomgo/internal/build"
 	"github.com/atomlust/atomgo/internal/buildcache"
@@ -312,6 +313,15 @@ func main() {
 	// 目标服务器(SSH 执行层)+ 远程构建 runner 配置(FR-8-14 续):项目可指定一台 server 作远程构建机,
 	// 配置后该项目构建下沉到远程执行(控制机本地克隆 → 经 SSH 传工作区 → 远程容器跑;token 只在控制机)。
 	targetSvc := target.New(st.DB, credVault, nil)
+	// 统一实时采集缓存(6-1/6-2 性能):后台按可配置间隔异步采集服务器指标与容器清单,
+	// 写入进程内缓存;服务器/容器/概览接口优先读缓存,秒开且降 SSH 压力。间隔存 system_settings
+	// (live_poll_interval,默认 30s,可在「设置 → 系统」页配置);ctx 取消即随进程停机退出。
+	liveCache := livecache.New()
+	for kind, c := range httpapi.NewLiveCacheCollectors(targetSvc) {
+		liveCache.Register(kind, c)
+	}
+	liveCache.SetTarget(targetSvc)
+	liveCache.SetIntervalFn(func() time.Duration { return httpapi.LivePollInterval(settingsSvc) })
 	// Assistant sessions use a separate, local-only recorder and masker.
 	opsMasker := mask.NewMasker()
 	if masterKey != nil {
@@ -603,7 +613,7 @@ func main() {
 
 	srv := &http.Server{
 		Addr: cfg.Addr,
-		Handler: httpapi.New(webFS, authSvc, append([]httpapi.Option{httpapi.WithOnboarding(onboarding.New(st.DB, onboardingCapabilities)), httpapi.WithVault(credVault), httpapi.WithProjects(projectSvc), httpapi.WithTriggers(triggerSvc), httpapi.WithPipelines(pipelineSvc), httpapi.WithPipelineSettings(pipelineSettingsSvc), httpapi.WithRuns(runSvc, pool), httpapi.WithWebhooks(webhookReceiver), httpapi.WithAudit(auditRec), httpapi.WithAccount(authSvc), httpapi.WithUsers(authSvc), httpapi.WithAISettings(aiSvc), httpapi.WithAIGenerate(repoAnalyzer), httpapi.WithRunDiff(runDiffer), httpapi.WithSource(sourceReader), httpapi.WithRefs(refsLister), httpapi.WithArtifactStore(artStore), httpapi.WithServers(targetSvc), httpapi.WithRunnerConfig(runnerSvc), httpapi.WithDeploy(deploySvc), httpapi.WithNotifications(notifySvc), httpapi.WithRetention(retentionSvc), httpapi.WithProxy(proxySvc), httpapi.WithDiagnosisFeedback(feedbackSvc), httpapi.WithAnomaly(anomalySvc), httpapi.WithAnomalyConfig(int(anomalyInterval.Seconds()), int(anomalyCooldown.Seconds())), httpapi.WithMetricsHistory(metricsHist), httpapi.WithSecretSource(secretSrc), httpapi.WithOAuth(oauthSvc), httpapi.WithOAuthPublicOrigin(cfg.PublicOrigin), httpapi.WithCron(cronSvc), httpapi.WithChain(chainSvc), httpapi.WithApprovals(approvalCoord, approvalStore), httpapi.WithApprovalLinks(approvalSigner), httpapi.WithConcurrency(concurrencySvc), httpapi.WithParameters(parameterSvc), httpapi.WithPromotion(promotionStore), httpapi.WithImageMirror(func(ctx context.Context, projectID, targetEnv, sourceRef string) (string, error) {
+		Handler: httpapi.New(webFS, authSvc, append([]httpapi.Option{httpapi.WithOnboarding(onboarding.New(st.DB, onboardingCapabilities)), httpapi.WithVault(credVault), httpapi.WithProjects(projectSvc), httpapi.WithTriggers(triggerSvc), httpapi.WithPipelines(pipelineSvc), httpapi.WithPipelineSettings(pipelineSettingsSvc), httpapi.WithRuns(runSvc, pool), httpapi.WithWebhooks(webhookReceiver), httpapi.WithAudit(auditRec), httpapi.WithAccount(authSvc), httpapi.WithUsers(authSvc), httpapi.WithAISettings(aiSvc), httpapi.WithAIGenerate(repoAnalyzer), httpapi.WithRunDiff(runDiffer), httpapi.WithSource(sourceReader), httpapi.WithRefs(refsLister), httpapi.WithArtifactStore(artStore), httpapi.WithServers(targetSvc), httpapi.WithRunnerConfig(runnerSvc), httpapi.WithDeploy(deploySvc), httpapi.WithNotifications(notifySvc), httpapi.WithRetention(retentionSvc), httpapi.WithProxy(proxySvc), httpapi.WithLiveCache(liveCache), httpapi.WithSettings(settingsSvc), httpapi.WithDiagnosisFeedback(feedbackSvc), httpapi.WithAnomaly(anomalySvc), httpapi.WithAnomalyConfig(int(anomalyInterval.Seconds()), int(anomalyCooldown.Seconds())), httpapi.WithMetricsHistory(metricsHist), httpapi.WithSecretSource(secretSrc), httpapi.WithOAuth(oauthSvc), httpapi.WithOAuthPublicOrigin(cfg.PublicOrigin), httpapi.WithCron(cronSvc), httpapi.WithChain(chainSvc), httpapi.WithApprovals(approvalCoord, approvalStore), httpapi.WithApprovalLinks(approvalSigner), httpapi.WithConcurrency(concurrencySvc), httpapi.WithParameters(parameterSvc), httpapi.WithPromotion(promotionStore), httpapi.WithImageMirror(func(ctx context.Context, projectID, targetEnv, sourceRef string) (string, error) {
 			if mirrorDriver == nil {
 				return sourceRef, nil // 无容器 CLI:不镜像,目标机仍从构建仓库拉
 			}
@@ -675,6 +685,10 @@ func main() {
 			}
 		}()
 	}
+
+	// 启动统一实时采集缓存后台采集器(随 ctx 停机退出;启动即采一轮,首屏不空窗)。
+	liveCache.Start(ctx)
+	log.Printf("[livecache] 实时采集缓存已启动(间隔 %s,可在「设置 → 系统」调整)", httpapi.LivePollInterval(settingsSvc))
 
 	go func() {
 		host, port := splitAddr(cfg.Addr)

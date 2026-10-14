@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/atomlust/atomgo/internal/livecache"
 	"github.com/atomlust/atomgo/internal/target"
 )
 
@@ -202,8 +203,9 @@ func humanContainersError(err error) string {
 // --- HTTP handlers ---
 
 // makeServerContainersHandler 返回 GET /api/servers/{id}/containers(认证,只读)。
+// 优先读实时采集缓存(命中且未过期即秒回);缺失/过期再实时采集并回填。
 // 服务器不存在/凭据不存在/保险库未配 → 标准状态码;连接/采集失败 → 200 + reachable:false,不 500。
-func makeServerContainersHandler(svc target.Service) http.HandlerFunc {
+func makeServerContainersHandler(cache *livecache.Service, svc target.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if svc == nil {
 			writeError(w, http.StatusServiceUnavailable, "internal", "服务器服务未初始化")
@@ -214,18 +216,30 @@ func makeServerContainersHandler(svc target.Service) http.HandlerFunc {
 			writeServerError(w, err)
 			return
 		}
+		if cache != nil {
+			if data, ok := cache.GetFresh("containers", id, cache.StaleAfter()); ok {
+				if dto, ok := data.(serverContainersDTO); ok {
+					writeJSON(w, http.StatusOK, dto)
+					return
+				}
+			}
+		}
 		out, locErr := collectServerContainers(r.Context(), svc, id)
 		if locErr != nil {
 			writeServerError(w, locErr)
 			return
+		}
+		if cache != nil {
+			cache.Put("containers", id, out)
 		}
 		writeJSON(w, http.StatusOK, out)
 	}
 }
 
 // makeAllServerContainersHandler 返回 GET /api/servers/containers(认证,只读;批量聚合)。
-// 逐台并行采集(有界并发),各自独立:某台失败仅该台 reachable:false,不连累其它台、不 500。
-func makeAllServerContainersHandler(svc target.Service) http.HandlerFunc {
+// 逐台优先读实时采集缓存(命中即用),缺失/过期再实时采集并回填——容器页打开不再被 docker ps 阻塞。
+// 各自独立:某台失败仅该台 reachable:false,不连累其它台、不 500。
+func makeAllServerContainersHandler(cache *livecache.Service, svc target.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if svc == nil {
 			writeError(w, http.StatusServiceUnavailable, "internal", "服务器服务未初始化")
@@ -238,6 +252,10 @@ func makeAllServerContainersHandler(svc target.Service) http.HandlerFunc {
 		}
 
 		items := make([]serverContainersDTO, len(servers))
+		stale := time.Duration(0)
+		if cache != nil {
+			stale = cache.StaleAfter()
+		}
 		sem := make(chan struct{}, containersConcurrency)
 		var wg sync.WaitGroup
 		for i, srv := range servers {
@@ -246,7 +264,19 @@ func makeAllServerContainersHandler(svc target.Service) http.HandlerFunc {
 				defer wg.Done()
 				sem <- struct{}{}
 				defer func() { <-sem }()
-				items[i], _ = collectServerContainers(r.Context(), svc, id)
+				if cache != nil {
+					if data, ok := cache.GetFresh("containers", id, stale); ok {
+						if dto, ok := data.(serverContainersDTO); ok {
+							items[i] = dto
+							return
+						}
+					}
+				}
+				dto, _ := collectServerContainers(r.Context(), svc, id)
+				if cache != nil {
+					cache.Put("containers", id, dto)
+				}
+				items[i] = dto
 			}(i, srv.ID)
 		}
 		wg.Wait()

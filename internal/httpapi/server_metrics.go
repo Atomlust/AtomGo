@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/atomlust/atomgo/internal/livecache"
 	"github.com/atomlust/atomgo/internal/target"
 )
 
@@ -511,8 +512,9 @@ func humanMetricsError(err error) string {
 // --- HTTP handlers ---
 
 // makeServerMetricsHandler 返回 GET /api/servers/{id}/metrics(认证,只读)。
+// 优先读实时采集缓存(命中且未过期即秒回);缺失/过期再实时采集并回填。
 // 服务器不存在/凭据不存在/保险库未配 → 标准状态码;连接/认证/采集失败 → 200 + reachable:false,不 500。
-func makeServerMetricsHandler(svc target.Service) http.HandlerFunc {
+func makeServerMetricsHandler(cache *livecache.Service, svc target.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if svc == nil {
 			writeError(w, http.StatusServiceUnavailable, "internal", "服务器服务未初始化")
@@ -524,19 +526,32 @@ func makeServerMetricsHandler(svc target.Service) http.HandlerFunc {
 			writeServerError(w, err)
 			return
 		}
+		// 缓存命中且未过期 → 直接返回(秒开)。
+		if cache != nil {
+			if data, ok := cache.GetFresh("metrics", id, cache.StaleAfter()); ok {
+				if dto, ok := data.(serverMetricsDTO); ok {
+					writeJSON(w, http.StatusOK, dto)
+					return
+				}
+			}
+		}
 		out, locErr := collectServerMetrics(r.Context(), svc, id)
 		// 定位类错误(凭据不存在 / 保险库未配)→ 走标准映射(422/503),而非 reachable:false。
 		if locErr != nil {
 			writeServerError(w, locErr)
 			return
 		}
+		if cache != nil {
+			cache.Put("metrics", id, out)
+		}
 		writeJSON(w, http.StatusOK, out)
 	}
 }
 
 // makeAllServerMetricsHandler 返回 GET /api/servers/metrics(认证,只读;批量)。
-// 逐台并行采集(有界并发),各自独立:某台失败仅该台 reachable:false,不连累其它台、不 500。
-func makeAllServerMetricsHandler(svc target.Service) http.HandlerFunc {
+// 逐台优先读实时采集缓存(命中即用),缺失/过期再实时采集并回填——故首页/概览不再被 SSH 往返阻塞。
+// 各自独立:某台失败仅该台 reachable:false,不连累其它台、不 500。
+func makeAllServerMetricsHandler(cache *livecache.Service, svc target.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if svc == nil {
 			writeError(w, http.StatusServiceUnavailable, "internal", "服务器服务未初始化")
@@ -549,6 +564,10 @@ func makeAllServerMetricsHandler(svc target.Service) http.HandlerFunc {
 		}
 
 		items := make([]serverMetricsDTO, len(servers))
+		stale := time.Duration(0)
+		if cache != nil {
+			stale = cache.StaleAfter()
+		}
 		sem := make(chan struct{}, metricsConcurrency)
 		var wg sync.WaitGroup
 		for i, srv := range servers {
@@ -557,8 +576,20 @@ func makeAllServerMetricsHandler(svc target.Service) http.HandlerFunc {
 				defer wg.Done()
 				sem <- struct{}{}
 				defer func() { <-sem }()
-				// 批量逐台独立:定位类错误对某台亦只表现为该台 reachable:false(忽略 locErr)。
-				items[i], _ = collectServerMetrics(r.Context(), svc, id)
+				// 缓存命中且未过期 → 直接用;否则实时采集并回填(定位类错误对某台只表现为 reachable:false)。
+				if cache != nil {
+					if data, ok := cache.GetFresh("metrics", id, stale); ok {
+						if dto, ok := data.(serverMetricsDTO); ok {
+							items[i] = dto
+							return
+						}
+					}
+				}
+				dto, _ := collectServerMetrics(r.Context(), svc, id)
+				if cache != nil {
+					cache.Put("metrics", id, dto)
+				}
+				items[i] = dto
 			}(i, srv.ID)
 		}
 		wg.Wait()

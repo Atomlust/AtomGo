@@ -26,6 +26,7 @@ import (
 	"github.com/atomlust/atomgo/internal/environments"
 	"github.com/atomlust/atomgo/internal/i18n"
 	"github.com/atomlust/atomgo/internal/library"
+	"github.com/atomlust/atomgo/internal/livecache"
 	"github.com/atomlust/atomgo/internal/metrics"
 	"github.com/atomlust/atomgo/internal/notify"
 	"github.com/atomlust/atomgo/internal/oauth"
@@ -37,6 +38,7 @@ import (
 	"github.com/atomlust/atomgo/internal/retention"
 	"github.com/atomlust/atomgo/internal/run"
 	"github.com/atomlust/atomgo/internal/runner"
+	"github.com/atomlust/atomgo/internal/settings"
 	"github.com/atomlust/atomgo/internal/target"
 	"github.com/atomlust/atomgo/internal/trigger"
 	"github.com/atomlust/atomgo/internal/vault"
@@ -108,6 +110,8 @@ type options struct {
 	retention        *retention.Service
 	proxy            proxy.Service
 	setup            SetupService
+	liveCache        *livecache.Service
+	settingsSvc      *settings.Service
 }
 
 // WithArtifactStore 注入制品库(Story 8-16):挂载产物下载端点
@@ -360,6 +364,18 @@ func WithProxy(s proxy.Service) Option {
 // (测试/嵌入式场景行为与从前一致)。
 func WithSetup(s SetupService) Option {
 	return func(o *options) { o.setup = s }
+}
+
+// WithLiveCache 注入统一实时采集缓存服务(后台异步采集 + 内存缓存),供服务器指标与容器清单
+// 接口优先读缓存(秒开、降 SSH 压力)。不传则相关接口回退为每次实时采集(与改造前行为一致)。
+func WithLiveCache(c *livecache.Service) Option {
+	return func(o *options) { o.liveCache = c }
+}
+
+// WithSettings 注入系统设置服务(system_settings 键值存储),供实时采集间隔等系统级配置读写。
+// 不传则相关端点返回 503。
+func WithSettings(s *settings.Service) Option {
+	return func(o *options) { o.settingsSvc = s }
 }
 
 // WithAnomaly 注入可配置异常检测服务(Story 6.5;FR-23),挂载 /api/anomaly/* 路由
@@ -729,15 +745,15 @@ func New(webFS fs.FS, authn auth.Authenticator, opts ...Option) http.Handler {
 		// 采集命令纯静态 array、不接受任何用户输入(AC-SEC-02);某台不可达/某指标缺失 →
 		// reachable:false / 该指标 null,不 500。批量端点逐台并行有界、各自独立。
 		// chi 字面段优先于 {id},/servers/metrics 不会被 /servers/{id} 吞。
-		ar.Get("/servers/metrics", makeAllServerMetricsHandler(sv))
-		ar.Get("/servers/{id}/metrics", makeServerMetricsHandler(sv))
+		ar.Get("/servers/metrics", makeAllServerMetricsHandler(o.liveCache, sv))
+		ar.Get("/servers/{id}/metrics", makeServerMetricsHandler(o.liveCache, sv))
 		// 容器管理列表/聚合(Portainer 式总览)——经 SSH 跑 `docker ps -a --format {{json .}}`
 		// 采集容器清单。复用 sv(4-1 装配,无新服务)。GET 只读 → 过 auth、豁免 CSRF。命令纯静态
 		// array、不接受任何用户输入(AC-SEC-02);某台不可达/无运行时 → reachable:false / runtime:""
 		// ,不 500。批量端点逐台并行有界、各自独立。容器**生命周期**写操作复用上面的 /service/action
 		// (type=docker)。chi 字面段 /servers/containers 优先于 {id},不会被吞。
-		ar.Get("/servers/containers", makeAllServerContainersHandler(sv))
-		ar.Get("/servers/{id}/containers", makeServerContainersHandler(sv))
+		ar.Get("/servers/containers", makeAllServerContainersHandler(o.liveCache, sv))
+		ar.Get("/servers/{id}/containers", makeServerContainersHandler(o.liveCache, sv))
 		// 容器实时资源 stats(docker stats --no-stream)。字面段 stats 不与 {id}/containers 冲突。
 		ar.Get("/servers/{id}/containers/stats", makeServerContainerStatsHandler(sv))
 		// 容器详情 inspect(docker inspect → 精选字段)。
@@ -802,6 +818,12 @@ func New(webFS fs.FS, authn auth.Authenticator, opts ...Option) http.Handler {
 		// 运行数据保留策略(全局)。GET 过 auth;PUT 需 settings:manage(仅管理员)。
 		ar.Get("/retention/config", makeGetRetentionConfigHandler(o.retention))
 		ar.With(requirePermission(auth.PermSettingsManage)).Put("/retention/config", makeSetRetentionConfigHandler(o.retention))
+
+		// 实时采集缓存配置(全局):后台采集间隔(秒)。GET 过 auth;PUT/refresh 需 settings:manage。
+		// 间隔决定服务器指标/容器清单后台采集节奏;refresh 立即重采一次(无需等下个 tick)。
+		ar.Get("/system/live-poll", makeGetLivePollHandler(o.settingsSvc))
+		ar.With(requirePermission(auth.PermSettingsManage)).Put("/system/live-poll", makeSetLivePollHandler(o.settingsSvc))
+		ar.With(requirePermission(auth.PermSettingsManage)).Post("/system/live-poll/refresh", makeRefreshLiveCacheHandler(o.liveCache))
 
 		// 自动 HTTPS + 域名反向代理(R1):路由 CRUD;经已装配的 target.Service 在目标主机上编排
 		// Caddy(渲染 Caddyfile + reload),Caddy 自动经 Let's Encrypt(HTTP-01)签发/续期证书。
