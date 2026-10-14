@@ -70,7 +70,6 @@ export default {
   envNameAria: 'Nombre del entorno',
   envDelAria: 'Eliminar entorno',
   envTargetServers: 'Servidores de destino',
-  envValidateBadge: 'Validación de existencia habilitada tras 4-1',
   envTargetServersPlaceholder: 'srv-prod-1, srv-prod-2 (separados por comas)',
   envTargetServersAria: 'Servidores de destino (separados por comas)',
   envEnvVars: 'Variables de entorno',

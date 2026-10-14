@@ -70,7 +70,6 @@ export default {
   envNameAria: '環境名',
   envDelAria: '環境を削除',
   envTargetServers: 'ターゲットサーバー',
-  envValidateBadge: '4-1 以降に存在検証を有効化',
   envTargetServersPlaceholder: 'srv-prod-1, srv-prod-2（カンマ区切り）',
   envTargetServersAria: 'ターゲットサーバー（カンマ区切り）',
   envEnvVars: '環境変数',

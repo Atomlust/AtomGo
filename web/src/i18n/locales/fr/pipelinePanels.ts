@@ -70,7 +70,6 @@ export default {
   envNameAria: 'Nom de l’environnement',
   envDelAria: 'Supprimer l’environnement',
   envTargetServers: 'Serveurs cibles',
-  envValidateBadge: 'Validation d’existence activée après 4-1',
   envTargetServersPlaceholder: 'srv-prod-1, srv-prod-2 (séparés par des virgules)',
   envTargetServersAria: 'Serveurs cibles (séparés par des virgules)',
   envEnvVars: 'Variables d’environnement',

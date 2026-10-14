@@ -70,7 +70,6 @@ export default {
   envNameAria: 'Umgebungsname',
   envDelAria: 'Umgebung löschen',
   envTargetServers: 'Zielserver',
-  envValidateBadge: 'Existenzprüfung nach 4-1 aktiviert',
   envTargetServersPlaceholder: 'srv-prod-1, srv-prod-2 (durch Kommas getrennt)',
   envTargetServersAria: 'Zielserver (durch Kommas getrennt)',
   envEnvVars: 'Umgebungsvariablen',

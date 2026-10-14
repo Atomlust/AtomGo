@@ -5,7 +5,8 @@
  * binding (type + url + vault credential). Edits a local Environment[] copy and emits
  * `update`; the parent (ProjectPipeline) owns save.
  *
- * Target servers are placeholders until Story 4-1 (existence not validated yet).
+ * Target servers reference the real server registry (Story 4-1); reference
+ * existence validation is still pending server-side (non-empty check only).
  * Secret env vars / registry credentials reference a vault credentialId — plaintext is
  * never entered, stored, or shown; only the server-computed mask appears.
  */
@@ -372,7 +373,6 @@ function maskFor(row: VarRow): string {
           <div class="eg">
             <div class="eg-l">
               {{ t('pipelinePanels.envTargetServers') }}
-              <span class="badge-soon">{{ t('pipelinePanels.envValidateBadge') }}</span>
             </div>
             <AppMultiSelect
               v-model="env.targetServerIds"
@@ -597,15 +597,6 @@ function maskFor(row: VarRow): string {
   margin-bottom: 7px;
 }
 .eg-hint { font-size: 0.7rem; color: var(--color-faint); font-weight: 400; }
-.badge-soon {
-  font-size: 0.66rem;
-  font-weight: 500;
-  color: var(--color-amber);
-  background: var(--color-amber-soft);
-  border: 1px solid var(--color-amber-line);
-  border-radius: 100px;
-  padding: 2px 8px;
-}
 
 .eg-input, .ev-k, .ev-v, .ev-sel {
   height: 32px;

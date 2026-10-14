@@ -70,7 +70,6 @@ export default {
   envNameAria: '環境名',
   envDelAria: '刪除環境',
   envTargetServers: '目標伺服器',
-  envValidateBadge: '4-1 後啟用存在性驗證',
   envTargetServersPlaceholder: 'srv-prod-1, srv-prod-2(逗號分隔)',
   envTargetServersAria: '目標伺服器(逗號分隔)',
   envEnvVars: '環境變數',

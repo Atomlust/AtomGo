@@ -70,7 +70,6 @@ export default {
   envNameAria: '환경 이름',
   envDelAria: '환경 삭제',
   envTargetServers: '대상 서버',
-  envValidateBadge: '4-1 이후 존재 여부 검증 활성화',
   envTargetServersPlaceholder: 'srv-prod-1, srv-prod-2(쉼표로 구분)',
   envTargetServersAria: '대상 서버(쉼표로 구분)',
   envEnvVars: '환경 변수',

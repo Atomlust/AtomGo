@@ -70,7 +70,6 @@ export default {
   envNameAria: '环境名',
   envDelAria: '删除环境',
   envTargetServers: '目标服务器',
-  envValidateBadge: '4-1 后启用存在性校验',
   envTargetServersPlaceholder: '选择目标服务器',
   envTargetServersAria: '目标服务器(逗号分隔)',
   envEnvVars: '环境变量',
