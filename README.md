@@ -43,9 +43,9 @@ It has since grown past that trio: publishing a deployed service on an HTTPS dom
 ## Screenshots
 
 <div align="center">
-  <img src="docs/screenshot/dashboard.png" alt="AtomGo dashboard" width="820">
+  <img src="docs/screenshot/dashboard-en.png" alt="AtomGo dashboard" width="820">
   <p><sub>Dashboard: DORA metrics, run activity, server health, environment status, and AI diagnosis on one screen</sub></p>
-  <img src="docs/screenshot/setup.png" alt="AtomGo first-run setup wizard" width="820">
+  <img src="docs/screenshot/setup-en.png" alt="AtomGo first-run setup wizard" width="820">
   <p><sub>First-run web wizard: pick a database, create the admin, generate the vault master key — a few clicks and you're deployed</sub></p>
 </div>
 

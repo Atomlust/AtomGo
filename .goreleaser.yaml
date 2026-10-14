@@ -137,5 +137,5 @@ release:
 
     Docker:
     ```sh
-    docker run -d -p 8080:8080 -v atomgo-data:/data ghcr.io/atomlust/atomgo:{{ .Version }}
+    docker run -d -p 7088:7088 -v atomgo-data:/data ghcr.io/atomlust/atomgo:{{ .Version }}
     ```
