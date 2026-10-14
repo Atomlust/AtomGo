@@ -51,6 +51,10 @@ checksum:
 changelog:
   sort: asc
   use: github
+  # 去掉默认 format 末尾的作者信息(默认会在每行追加 (作者 <邮箱>),
+  # 而本项目提交用的是占位身份 Admin <Admin@ATOMLUST>,无法解析为 GitHub 账号,
+  # 会退化成噪音。覆盖为不含作者的版本,保留 SHA + 提交说明即可。
+  format: "{{.SHA}}: {{.Message}}"
   groups:
     - title: 🚀 新功能
       regexp: '^.*?feat(\(.+\))??!?:.+$'
