@@ -218,6 +218,33 @@ func TestSaveValidWildcards(t *testing.T) {
 	}
 }
 
+// TestSaveDuplicateBranchPattern:trim 后重复的分支模式被拒(ErrDuplicateBranchPattern)。
+// matchBranch 首条命中生效,重复条等于静默废弃,必须在入库前拦截。
+func TestSaveDuplicateBranchPattern(t *testing.T) {
+	svc, _, _, projID := newSvc(t)
+	cases := [][]BranchMapping{
+		{{BranchPattern: "release/*", Environment: "a"}, {BranchPattern: "release/*", Environment: "b"}},
+		{{BranchPattern: "main", Environment: "a"}, {BranchPattern: " main ", Environment: "b"}},
+		{{BranchPattern: "v*.*", Environment: "a"}, {BranchPattern: "v*.*", Environment: "b"}, {BranchPattern: "main", Environment: "c"}},
+	}
+	for i, mappings := range cases {
+		_, err := svc.Save(context.Background(), projID, SaveInput{
+			BranchMappings:  mappings,
+			UnmatchedPolicy: PolicyRecord,
+		})
+		if !errors.Is(err, ErrDuplicateBranchPattern) {
+			t.Fatalf("case %d: err = %v, want ErrDuplicateBranchPattern", i, err)
+		}
+	}
+	// 不同模式(即使都含通配)不视为重复。
+	if _, err := svc.Save(context.Background(), projID, SaveInput{
+		BranchMappings:  []BranchMapping{{BranchPattern: "release/*", Environment: "a"}, {BranchPattern: "release/1.*", Environment: "b"}},
+		UnmatchedPolicy: PolicyRecord,
+	}); err != nil {
+		t.Fatalf("distinct wildcard patterns should be valid, got %v", err)
+	}
+}
+
 func TestSaveInvalidPolicy(t *testing.T) {
 	svc, _, _, projID := newSvc(t)
 	_, err := svc.Save(context.Background(), projID, SaveInput{UnmatchedPolicy: "deploy"})

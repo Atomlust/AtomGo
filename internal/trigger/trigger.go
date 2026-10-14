@@ -1,4 +1,4 @@
-// Package trigger 是「项目触发设置与分支映射」的领域层(FR-1 / FR-2 / Story 2.3)。
+// Package trigger 是「项目触发与规则(分支映射)」的领域层(FR-1 / FR-2 / Story 2.3)。
 //
 // 每个项目持有一份触发配置:webhook 接收端点 token、签名密钥、触发事件开关、
 // 分支(通配)→ 环境 + 目标服务器映射、未匹配策略。webhook 签名密钥经 vault
@@ -50,6 +50,9 @@ var (
 	ErrVaultUnconfigured = errors.New("trigger: vault unconfigured")
 	// ErrInvalidBranchPattern 表示分支模式非空校验或通配语法校验失败。
 	ErrInvalidBranchPattern = errors.New("trigger: invalid branch pattern")
+	// ErrDuplicateBranchPattern 表示多条映射使用了同一分支模式(trim 后精确匹配)。
+	// matchBranch 首条命中生效,重复模式会让后续条永久静默失效,故在入库前拦截。
+	ErrDuplicateBranchPattern = errors.New("trigger: duplicate branch pattern")
 	// ErrInvalidPolicy 表示未匹配策略枚举非法。
 	ErrInvalidPolicy = errors.New("trigger: invalid unmatched policy")
 	// ErrInvalidPathFilter 表示路径过滤 glob 非空校验失败(去空白后为空)。
@@ -435,16 +438,22 @@ func normalizePolicy(p string) (string, error) {
 
 // normalizeMappings 校验每条分支映射并补全 id；保证 targetServerIds 非 nil(JSON [])。
 //
-// branchPattern 非空 + 合法通配(见 validateBranchPattern)。
+// branchPattern 非空 + 合法通配(见 validateBranchPattern);trim 后不可重复
+// (ErrDuplicateBranchPattern — 首条命中语义下重复模式等于静默废弃后续条)。
 // TODO(Story 4-1):接入 target_servers 表后,对 TargetServerIDs 做存在性校验
 // (调用 validateTargetServerIDs);本期不拦(目标服务器表尚不存在)。
 func normalizeMappings(in []BranchMapping) ([]BranchMapping, error) {
 	out := make([]BranchMapping, 0, len(in))
+	seen := make(map[string]struct{}, len(in))
 	for _, m := range in {
 		pattern := strings.TrimSpace(m.BranchPattern)
 		if err := validateBranchPattern(pattern); err != nil {
 			return nil, err
 		}
+		if _, dup := seen[pattern]; dup {
+			return nil, fmt.Errorf("%w: %s", ErrDuplicateBranchPattern, pattern)
+		}
+		seen[pattern] = struct{}{}
 		id := strings.TrimSpace(m.ID)
 		if id == "" {
 			id = uuid.NewString()

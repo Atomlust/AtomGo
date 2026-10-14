@@ -84,6 +84,8 @@ func writeTriggerError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusNotFound, "trigger_not_found", "触发配置不存在")
 	case errors.Is(err, trigger.ErrInvalidBranchPattern):
 		writeError(w, http.StatusUnprocessableEntity, "invalid_branch_pattern", "分支模式不能为空且需为合法通配(如 main、release/*)")
+	case errors.Is(err, trigger.ErrDuplicateBranchPattern):
+		writeError(w, http.StatusUnprocessableEntity, "duplicate_branch_pattern", "分支模式不可重复:匹配按首条生效,重复条将永远不生效")
 	case errors.Is(err, trigger.ErrInvalidPolicy):
 		writeError(w, http.StatusUnprocessableEntity, "invalid_unmatched_policy", "未匹配策略只能为 record 或 ignore")
 	case errors.Is(err, trigger.ErrInvalidPathFilter):

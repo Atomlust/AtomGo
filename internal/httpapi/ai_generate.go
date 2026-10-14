@@ -554,6 +554,8 @@ func writeAIApplyError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusUnprocessableEntity, "invalid_build", "构建配置非法")
 	case errors.Is(err, trigger.ErrInvalidBranchPattern):
 		writeError(w, http.StatusUnprocessableEntity, "invalid_branch_pattern", "分支模式非法")
+	case errors.Is(err, trigger.ErrDuplicateBranchPattern):
+		writeError(w, http.StatusUnprocessableEntity, "duplicate_branch_pattern", "分支模式重复")
 	case errors.Is(err, trigger.ErrInvalidPolicy):
 		writeError(w, http.StatusUnprocessableEntity, "invalid_policy", "未匹配策略非法")
 	case errors.Is(err, pipeline.ErrSettingsVaultUnconfigured),
