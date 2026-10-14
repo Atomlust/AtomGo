@@ -85,7 +85,7 @@ jobs:
           for i in $(seq 1 12); do
             v=$(curl -sS -o /dev/null -w "%{http_code}" \
               -H "Accept: application/vnd.docker.distribution.manifest.v2+json" \
-              "https://ghcr.io/v2/$OWNER/$PKG/manifests/1.0.0")
+              "https://ghcr.io/v2/$OWNER/$PKG/manifests/${GITHUB_REF_NAME#v}")
             echo "verify attempt $i -> HTTP $v"
             [ "$v" = "200" ] && { echo "ghcr package is now PUBLIC"; exit 0; }
             sleep 10
