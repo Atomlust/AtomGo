@@ -6,7 +6,7 @@
  *
  * Used by:
  *   - ProjectTriggers.vue  (standalone page at /projects/:id/triggers)
- *   - ProjectPipeline.vue  (embedded in the "触发设置" tab)
+ *   - ProjectPipeline.vue  (embedded in the "触发与规则" tab)
  */
 import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -15,10 +15,11 @@ import {
   saveTrigger,
   resetSecret,
   type TriggerConfig,
-  type BranchMapping,
   type UnmatchedPolicy,
 } from '../api/triggers'
 import { HttpError } from '../api/http'
+import { getSettings, type Environment } from '../api/pipelineSettings'
+import { listServers, type Server } from '../api/servers'
 import CronPanel from './CronPanel.vue'
 import ConcurrencyPanel from './ConcurrencyPanel.vue'
 import ParametersPanel from './ParametersPanel.vue'
@@ -62,6 +63,72 @@ interface MappingRow {
 let _keySeq = 0
 const mappings = ref<MappingRow[]>([])
 const unmatchedPolicy = ref<UnmatchedPolicy>('record')
+
+// ─── 环境与凭据数据(环境下拉 + 目标服务器继承的数据源) ────────────────────────
+// 环境定义来自 pipeline settings(「环境与凭据」tab 编辑的那份);目标服务器不再
+// 在本卡维护,而是继承所选环境的绑定(环境卡上的 targetServerIds),保存时快照进
+// 映射(后端 run 记录消费,保持 Story 4-1 前向兼容)。
+
+const environments = ref<Environment[]>([])
+const servers = ref<Server[]>([])
+/** 环境数据加载失败(非阻断:其它触发器设置仍可保存,仅环境下拉不可用)。 */
+const envDataError = ref('')
+
+function envByName(name: string): Environment | undefined {
+  const n = name.trim()
+  if (!n) return undefined
+  return environments.value.find((e) => e.name === n)
+}
+
+/** 环境绑定的目标服务器 id;环境不存在(旧数据/已删环境)→ 空。 */
+function serversForEnv(name: string): string[] {
+  const env = envByName(name)
+  return env ? [...(env.targetServerIds ?? [])] : []
+}
+
+function serverName(id: string): string {
+  return servers.value.find((s) => s.id === id)?.name ?? id
+}
+
+/** 行展示用的目标服务器名列表:环境存在 → 继承其绑定;否则回退映射里的旧快照。 */
+function inheritedServerNames(row: MappingRow): string {
+  const ids = envByName(row.environment) ? serversForEnv(row.environment) : row.targetServerIds
+  return ids.length ? ids.map(serverName).join('、') : ''
+}
+
+/** 环境下拉选项:已知环境 + 当前值(已失效环境也保留,避免静默丢失旧数据)。 */
+function envOptions(row: MappingRow): Array<{ name: string; label: string }> {
+  const opts = environments.value.map((e) => ({ name: e.name, label: e.name }))
+  const cur = row.environment.trim()
+  if (cur && !environments.value.some((e) => e.name === cur)) {
+    opts.unshift({ name: cur, label: `${cur} ${t('projectPanels.triggers.envStaleSuffix')}` })
+  }
+  return opts
+}
+
+function onEnvChange(row: MappingRow): void {
+  // 环境切换 → 目标服务器快照同步为所选环境的绑定。
+  if (envByName(row.environment)) row.targetServerIds = serversForEnv(row.environment)
+}
+
+/** 环境数据到位后,把已识别环境的行快照刷新为最新绑定(旧/失效环境不动)。 */
+function syncInheritedServers(): void {
+  for (const row of mappings.value) {
+    if (envByName(row.environment)) row.targetServerIds = serversForEnv(row.environment)
+  }
+}
+
+async function loadEnvData(): Promise<void> {
+  envDataError.value = ''
+  try {
+    const [settings, serverList] = await Promise.all([getSettings(props.projectId), listServers()])
+    environments.value = settings.environments ?? []
+    servers.value = serverList
+    syncInheritedServers()
+  } catch {
+    envDataError.value = t('projectPanels.triggers.envLoadFailed')
+  }
+}
 
 // 路径过滤(monorepo · P0):多行 glob 文本框;每行一条,空行忽略。
 // 仅当本次 push 改动文件匹配任一 glob 才触发(拿不到改动文件列表时放行,诚实降级)。
@@ -182,7 +249,31 @@ function validatePattern(pattern: string): string {
 }
 
 function addRow(): void {
-  mappings.value.push({ _key: ++_keySeq, branchPattern: '', environment: '', targetServerIds: [], patternError: '' })
+  insertMappingRow({ _key: ++_keySeq, branchPattern: '', environment: '', targetServerIds: [], patternError: '' })
+}
+
+/**
+ * 插入新行:若已有含通配(`*`)的映射行,插到首个通配行**之前**。
+ * matchBranch 首条命中生效,具体规则排在通配规则之后等于永久失效(无任何提示),
+ * 故在 UI 层强制「具体在上、通配在下」的次序。
+ */
+function insertMappingRow(row: MappingRow): void {
+  const wildcardIdx = mappings.value.findIndex((r) => r.branchPattern.includes('*'))
+  if (wildcardIdx === -1) mappings.value.push(row)
+  else mappings.value.splice(wildcardIdx, 0, row)
+}
+
+/** 一键默认映射:预填 main → 首个环境(目标服务器随环境继承)。保存前均可改。 */
+function addDefaultMapping(): void {
+  const env = environments.value[0]
+  if (!env) return
+  insertMappingRow({
+    _key: ++_keySeq,
+    branchPattern: 'main',
+    environment: env.name,
+    targetServerIds: serversForEnv(env.name),
+    patternError: '',
+  })
 }
 
 function removeRow(key: number): void {
@@ -307,6 +398,8 @@ async function loadTrigger(): Promise<void> {
   try {
     const config = await getTrigger(props.projectId)
     applyConfig(config)
+    // 环境/服务器数据为辅加载:失败不阻断触发配置本身的查看与保存。
+    void loadEnvData()
     loadState.value = 'idle'
   } catch (err) {
     if (err instanceof HttpError) {
@@ -521,12 +614,28 @@ const displayWebhookUrl = computed(() => {
             <span v-if="row.patternError" class="map-field-error" role="alert">{{ row.patternError }}</span>
           </div>
           <div class="map-cell">
-            <input v-model="row.environment" type="text" class="map-input" :placeholder="t('projectPanels.triggers.envPlaceholder')" :aria-label="t('projectPanels.triggers.envNameAria', { key: row._key })"/>
+            <select
+              v-model="row.environment"
+              class="map-input map-select"
+              :class="{ 'map-select--stale': !!row.environment && !envByName(row.environment) }"
+              :disabled="!!envDataError"
+              :aria-label="t('projectPanels.triggers.envNameAria', { key: row._key })"
+              @change="onEnvChange(row)"
+            >
+              <option value="">{{ t('projectPanels.triggers.envSelectPlaceholder') }}</option>
+              <option v-for="opt in envOptions(row)" :key="opt.name" :value="opt.name">{{ opt.label }}</option>
+            </select>
           </div>
           <div class="map-cell map-cell--servers">
-            <div class="servers-placeholder" :aria-label="t('projectPanels.triggers.serversPlaceholderAria')">
+            <div
+              class="servers-inherit"
+              :class="{ 'servers-inherit--empty': !row.environment }"
+              :aria-label="row.environment ? t('projectPanels.triggers.serversInheritAria', { env: row.environment }) : t('projectPanels.triggers.serversPickEnvFirst')"
+            >
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="4" width="18" height="6" rx="1.6"/><rect x="3" y="14" width="18" height="6" rx="1.6"/><path d="M7 7h.01M7 17h.01"/></svg>
-              <span class="servers-placeholder-text">{{ t('projectPanels.triggers.serversPlaceholderText') }}</span>
+              <span v-if="row.environment && inheritedServerNames(row)" class="servers-inherit-names">{{ inheritedServerNames(row) }}</span>
+              <span v-else-if="row.environment" class="servers-inherit-none">{{ t('projectPanels.triggers.serversUnbound') }}</span>
+              <span v-else class="servers-inherit-none">{{ t('projectPanels.triggers.serversPickEnvFirst') }}</span>
             </div>
           </div>
           <div class="map-cell map-cell--actions">
@@ -535,11 +644,26 @@ const displayWebhookUrl = computed(() => {
             </button>
           </div>
         </div>
-        <div v-if="mappings.length === 0" class="map-empty"><span>{{ t('projectPanels.triggers.noMappings') }}</span></div>
+        <div v-if="mappings.length === 0" class="map-empty">
+          <span class="map-empty-title">{{ t('projectPanels.triggers.noMappings') }}</span>
+          <span class="map-empty-impact">{{ t('projectPanels.triggers.noMappingsImpact') }}</span>
+          <span class="map-empty-hint">{{ t('projectPanels.triggers.noMappingsHint') }}</span>
+          <button
+            class="add-default-btn"
+            :disabled="environments.length === 0"
+            :title="environments.length === 0 ? t('projectPanels.triggers.addDefaultDisabled') : undefined"
+            @click="addDefaultMapping"
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+            {{ t('projectPanels.triggers.addDefaultMapping', { pattern: 'main', env: environments[0]?.name ?? '' }) }}
+          </button>
+        </div>
         <button class="add-row-btn" @click="addRow">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
           {{ t('projectPanels.triggers.addMapping') }}
         </button>
+        <p v-if="!envDataError && environments.length === 0" class="map-warn" role="note">{{ t('projectPanels.triggers.envNoneDefined') }}</p>
+        <p v-else-if="envDataError" class="map-warn map-warn--err" role="alert">{{ envDataError }}</p>
         <p class="map-note">{{ t('projectPanels.triggers.mappingNotePrefix') }}<code class="mono">release/*</code> {{ t('projectPanels.triggers.mappingNoteSuffix') }}</p>
         <div class="card-foot">
           <span v-if="saveScope === 'mappings' && saveBanner" class="card-foot-status card-foot-status--err" role="alert">
@@ -774,12 +898,25 @@ const displayWebhookUrl = computed(() => {
 .map-input::placeholder { color: var(--color-faint); }
 .map-input:focus { outline: none; border-color: var(--color-primary); box-shadow: 0 0 0 3px var(--color-primary-soft); }
 .map-input--error { border-color: var(--color-red); }
+.map-select { appearance: none; padding-right: 26px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6' fill='none' stroke='%23888' stroke-width='1.6'%3E%3Cpath d='M1 1l4 4 4-4'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; cursor: pointer; }
+.map-select:disabled { opacity: 0.6; cursor: not-allowed; }
+.map-select--stale { color: var(--color-amber, var(--color-faint)); }
+.servers-inherit { display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 10px; background: var(--color-inset); border: 1px solid var(--color-border); border-radius: var(--rounded); color: var(--color-dim); min-width: 0; }
+.servers-inherit--empty { color: var(--color-faint); border-style: dashed; }
+.servers-inherit-names { font-size: 0.76rem; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.servers-inherit-none { font-size: 0.74rem; line-height: 1.3; color: var(--color-faint); }
+.add-default-btn { display: inline-flex; align-items: center; gap: 7px; margin: 2px auto 0; padding: 8px 14px; border: 1px solid var(--color-primary); background: var(--color-primary-soft); color: var(--color-primary); font-family: var(--font-sans); font-size: 0.78rem; font-weight: 550; border-radius: var(--rounded); cursor: pointer; transition: background-color var(--duration-fast); }
+.add-default-btn:hover:not(:disabled) { background: var(--color-primary); color: var(--color-on-primary, #fff); }
+.add-default-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.map-warn { padding: 10px 18px; font-size: 0.75rem; line-height: 1.6; color: var(--color-amber, var(--color-faint)); border-top: 1px solid var(--color-border); }
+.map-warn--err { color: var(--color-red); }
 .map-field-error { font-size: 0.73rem; color: var(--color-red); line-height: 1.4; }
-.servers-placeholder { display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 10px; background: var(--color-inset); border: 1px dashed var(--color-border-strong); border-radius: var(--rounded); color: var(--color-faint); }
-.servers-placeholder-text { font-size: 0.74rem; line-height: 1.3; }
 .row-del-btn { width: 30px; height: 30px; border: 1px solid var(--color-border); background: transparent; color: var(--color-faint); border-radius: var(--rounded-md); cursor: pointer; display: grid; place-items: center; transition: color var(--duration-fast), border-color var(--duration-fast), background-color var(--duration-fast); margin-top: 3px; }
 .row-del-btn:hover { color: var(--color-red); border-color: var(--color-red-line); background: var(--color-red-soft); }
-.map-empty { padding: 20px 18px; font-size: 0.82rem; color: var(--color-faint); font-style: italic; border-bottom: 1px solid var(--color-border); text-align: center; }
+.map-empty { padding: 22px 18px; color: var(--color-faint); border-bottom: 1px solid var(--color-border); text-align: center; display: flex; flex-direction: column; gap: 7px; }
+.map-empty-title { font-size: 0.82rem; color: var(--color-dim); font-weight: 550; font-style: italic; }
+.map-empty-impact { font-size: 0.78rem; line-height: 1.7; color: var(--color-faint); max-width: 62ch; margin: 0 auto; }
+.map-empty-hint { font-size: 0.76rem; line-height: 1.6; color: var(--color-faint); max-width: 62ch; margin: 0 auto; }
 .add-row-btn { display: flex; align-items: center; gap: 7px; padding: 12px 18px; width: 100%; border: none; background: transparent; color: var(--color-primary); font-family: var(--font-sans); font-size: 0.8rem; font-weight: 500; cursor: pointer; text-align: left; transition: color var(--duration-fast), background-color var(--duration-fast); border-top: 1px solid var(--color-border); }
 .add-row-btn:hover { background: var(--color-inset); }
 .map-note { padding: 12px 18px 14px; font-size: 0.76rem; color: var(--color-faint); line-height: 1.6; border-top: 1px solid var(--color-border); }
