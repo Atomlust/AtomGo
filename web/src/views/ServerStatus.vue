@@ -15,6 +15,7 @@ import { useI18n } from 'vue-i18n'
 import { Robot, Refresh } from '@vicons/tabler'
 import { getAllServerMetrics, listServers, type ServerMetrics, type Server } from '../api/servers'
 import { HttpError } from '../api/http'
+import { useLivePoll } from '../composables/useLivePoll'
 import ServerMetricsCard from '../components/ops/ServerMetricsCard.vue'
 import ContainerAiPanel from '../components/ops/ContainerAiPanel.vue'
 import AppButton from '../components/ui/AppButton.vue'
@@ -82,7 +83,9 @@ async function loadServerNames(): Promise<Map<string, string>> {
 // ─── 自动刷新 ────────────────────────────────────────────────────────────────
 // 指标实时、不落库,这里定时轮询(stale-while-revalidate:旧数据留屏、后台静默重取)。
 // 标签页隐藏时暂停(省 SSH;终端常在新标签开,这页可能被晾在后台),回到前台立即补一次。
-const REFRESH_INTERVAL_MS = 12_000
+// 轮询节奏与后台统一采集间隔保持一致(「设置 → 系统 → 实时采集缓存」),
+// 不再写死 12 秒;比采集间隔更快只会重复读到同一份缓存快照。
+const { pollSeconds, loadPollInterval } = useLivePoll()
 let pollTimer: ReturnType<typeof setInterval> | null = null
 
 function startPolling(): void {
@@ -90,7 +93,7 @@ function startPolling(): void {
   pollTimer = setInterval(() => {
     // 上一轮还在飞 / 出错重试中就跳过这拍,避免叠请求。
     if (loadState.value !== 'loading') void load()
-  }, REFRESH_INTERVAL_MS)
+  }, pollSeconds.value * 1000)
 }
 
 function stopPolling(): void {
@@ -109,8 +112,10 @@ function onVisibilityChange(): void {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
   void load()
+  // 先取到配置的间隔再起轮询,使实际节奏与提示文案一致。
+  await loadPollInterval()
   startPolling()
   document.addEventListener('visibilitychange', onVisibilityChange)
 })
@@ -131,7 +136,7 @@ onUnmounted(() => {
           <span v-if="totalCount > 0" class="view-sub__count">
             · {{ t('serverStatus.reachableSummary', { reachable: reachableCount, total: totalCount }) }}
           </span>
-          <span class="view-sub__count">· {{ t('serverStatus.autoRefresh', { n: 12 }) }}</span>
+          <span class="view-sub__count">· {{ t('serverStatus.autoRefresh', { n: pollSeconds }) }}</span>
         </p>
       </div>
       <div class="view-header__actions">

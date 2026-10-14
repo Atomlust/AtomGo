@@ -14,6 +14,7 @@ import { getVersion, checkUpdate, applyUpdate } from '../../api/version'
 import type { VersionInfo, UpdateInfo } from '../../api/version'
 import { useSessionStore } from '../../stores/session'
 import { getRetentionConfig, setRetentionConfig, type RetentionConfig } from '../../api/retention'
+import { getLivePoll, setLivePoll, refreshLiveCache, type LivePollConfig } from '../../api/livepoll'
 import { HttpError } from '../../api/http'
 import AppButton from '../../components/ui/AppButton.vue'
 
@@ -183,6 +184,55 @@ const rtSaving = ref(false)
 const rtSaved = ref(false)
 const rtError = ref('')
 
+// ─── 实时采集缓存(统一缓存化:后台周期采集 → 内存缓存 → 页面读缓存) ───────────────
+const poll = ref<LivePollConfig>({ intervalSeconds: 30 })
+const pollLoading = ref(true)
+const pollSaving = ref(false)
+const pollRefreshing = ref(false)
+const pollSaved = ref(false)
+const pollError = ref('')
+
+async function loadLivePoll(): Promise<void> {
+  pollLoading.value = true
+  try {
+    poll.value = await getLivePoll()
+  } catch {
+    // 读失败保持默认(30s),不阻断页面
+  } finally {
+    pollLoading.value = false
+  }
+}
+
+async function saveLivePoll(): Promise<void> {
+  pollSaving.value = true
+  pollSaved.value = false
+  pollError.value = ''
+  try {
+    poll.value = await setLivePoll({
+      intervalSeconds: Math.min(3600, Math.max(10, Math.floor(Number(poll.value.intervalSeconds) || 30))),
+    })
+    pollSaved.value = true
+    setTimeout(() => { pollSaved.value = false }, 2000)
+  } catch {
+    pollError.value = t('settingsSystem.liveCollectSaveFailed')
+  } finally {
+    pollSaving.value = false
+  }
+}
+
+async function runRefreshLiveCache(): Promise<void> {
+  pollRefreshing.value = true
+  pollError.value = ''
+  try {
+    await refreshLiveCache()
+    pollSaved.value = false
+  } catch {
+    pollError.value = t('settingsSystem.liveCollectRefreshFailed')
+  } finally {
+    pollRefreshing.value = false
+  }
+}
+
 async function loadRetention(): Promise<void> {
   rtLoading.value = true
   try {
@@ -216,6 +266,7 @@ async function saveRetention(): Promise<void> {
 onMounted(() => {
   void loadVersion()
   void loadRetention()
+  void loadLivePoll()
 })
 </script>
 
@@ -226,6 +277,8 @@ onMounted(() => {
       <p class="sys-sub">{{ t('settingsSystem.subtitle') }}</p>
     </header>
 
+    <div class="sys-grid">
+      <div class="sys-col">
     <!-- 版本面板 -->
     <article class="sys-panel">
       <span class="sys-accent" aria-hidden="true" />
@@ -380,15 +433,71 @@ onMounted(() => {
         </AppButton>
       </div>
     </article>
+      </div><!-- /sys-col (left) -->
+
+      <div class="sys-col">
+        <!-- 实时采集缓存(统一缓存化):后台周期采集 → 内存缓存 → 页面读缓存,秒开且降 SSH 压力 -->
+        <article class="sys-panel sys-live">
+          <span class="sys-accent" aria-hidden="true" />
+          <div class="rt-head">
+            <div class="rt-head-text">
+              <h3 class="rt-title">{{ t('settingsSystem.liveCollectTitle') }}</h3>
+              <p class="rt-sub">{{ t('settingsSystem.liveCollectSub') }}</p>
+            </div>
+          </div>
+          <p class="lc-scope">{{ t('settingsSystem.liveCollectScope') }}</p>
+          <label class="rt-field">
+            <span class="rt-label">{{ t('settingsSystem.liveCollectInterval') }}</span>
+            <input class="rt-input mono" type="number" min="10" max="3600" step="1" v-model.number="poll.intervalSeconds" :disabled="pollLoading" />
+            <span class="rt-hint">{{ t('settingsSystem.liveCollectIntervalHint') }}</span>
+          </label>
+          <div class="rt-actions">
+            <span v-if="pollSaved" class="rt-saved" role="status">{{ t('settingsSystem.liveCollectSaved') }}</span>
+            <span v-if="pollError" class="rt-err" role="alert">{{ pollError }}</span>
+            <AppButton variant="primary" :loading="pollSaving" :disabled="pollLoading" @click="saveLivePoll">{{ t('settingsSystem.liveCollectSave') }}</AppButton>
+            <AppButton variant="ghost" :loading="pollRefreshing" :disabled="pollLoading" @click="runRefreshLiveCache">{{ t('settingsSystem.liveCollectRefresh') }}</AppButton>
+          </div>
+        </article>
+      </div>
+    </div><!-- /sys-grid -->
   </section>
 </template>
 
 <style scoped>
 .sys {
+  /* 铺满可用宽度(外层 .main-inner 已按 --content-max 居中限宽),右侧不再留大片空白。 */
+  max-width: var(--content-max);
+}
+
+/* ── 两列自适应布局(左:版本/保留;右:实时采集缓存) ───────────────── */
+.sys-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+  align-items: start;
+  margin-top: var(--space-1);
+}
+.sys-col {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-  max-width: 680px;
+  min-width: 0;
+}
+/* 窄屏(右栏为空时)退化为单列,避免挤压 */
+@media (max-width: 900px) {
+  .sys-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* 实时采集缓存卡片 */
+.lc-scope {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--color-faint);
+  border-left: 2px solid var(--color-border);
+  padding-left: 10px;
 }
 
 .sys-head {

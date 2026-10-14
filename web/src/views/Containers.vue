@@ -13,6 +13,7 @@ import { HttpError } from '../api/http'
 import { stateBucket, type StateBucket } from '../lib/containerState'
 import { useToast } from '../composables/useToast'
 import { useConfirm } from '../composables/useConfirm'
+import { useLivePoll } from '../composables/useLivePoll'
 import AppButton from '../components/ui/AppButton.vue'
 import EmptyState from '../components/ui/EmptyState.vue'
 import ErrorState from '../components/ui/ErrorState.vue'
@@ -39,7 +40,9 @@ const groups = ref<ServerContainers[]>([])
 const serverById = ref<Map<string, Server>>(new Map())
 const refreshing = ref(false)
 
-const POLL_MS = 12_000
+// 轮询节奏与后台统一采集间隔保持一致(「设置 → 系统 → 实时采集缓存」),
+// 不再写死 12 秒;比采集间隔更快只会重复读到同一份缓存快照。
+const { pollSeconds, loadPollInterval } = useLivePoll()
 let timer: ReturnType<typeof setInterval> | null = null
 
 // ─── 聚合统计 ─────────────────────────────────────────────────────────────────
@@ -250,9 +253,11 @@ async function load(): Promise<void> {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
+  // 先取到配置的间隔再起轮询,使实际节奏与提示文案一致。
+  await loadPollInterval()
   void load()
-  timer = setInterval(() => void load(), POLL_MS)
+  timer = setInterval(() => void load(), pollSeconds.value * 1000)
 })
 onUnmounted(() => {
   if (timer) clearInterval(timer)
@@ -269,7 +274,7 @@ onUnmounted(() => {
           <span v-if="totalContainers > 0" class="view-sub__count">
             {{ t('containers.countSummary', { total: totalContainers, running: runningContainers }) }}
           </span>
-          <span class="view-sub__count">{{ t('containers.autoRefresh', { n: POLL_MS / 1000 }) }}</span>
+          <span class="view-sub__count">{{ t('containers.autoRefresh', { n: pollSeconds }) }}</span>
         </p>
       </div>
       <div class="header-actions">
@@ -531,7 +536,7 @@ onUnmounted(() => {
   justify-content: center;
   width: 16px;
   height: 16px;
-  font-size: 11px;
+  font-size: 0.733rem;
   line-height: 1;
   color: var(--color-faint);
   background: transparent;
