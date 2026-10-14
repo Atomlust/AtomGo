@@ -48,22 +48,47 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # 发版后把 ghcr.io 包设为公开:否则匿名 docker pull 会 401(unauthorized)。
-      # 可见性按「包」设置,一次覆盖 1.0.0 / latest 等所有 tag;GITHUB_TOKEN 已具备 packages:write。
-      # 仅改可见性,即使 API 抖动也不应阻断已发布的 Release,故 continue-on-error。
+      # 关键:工作流用 GITHUB_TOKEN 推送的镜像,包会挂在「仓库(repository)」名下(repo-linked),
+      # 必须用 /repos/{owner}/{repo}/packages 端点;org 端点对 repo-linked 包会返回伪 204 而不生效。
+      # 最后用匿名 registry 轮询自校验:返回 200 即公开生效,否则明确报错(GITHUB_TOKEN 可能无权改可见性)。
       - name: make ghcr package public
         if: success()
-        continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          for i in 1 2 3; do
-            code=$(curl -sS -o /dev/null -w "%{http_code}" \
-              -X PATCH \
+          set -euo pipefail
+          OWNER="atomlust"
+          REPO="atomgo"
+          PKG="atomgo"
+
+          # 1) 优先 repo-linked 端点(工作流推送的包归属仓库,这是正确端点)
+          set +e
+          code=$(curl -sS -o /dev/null -w "%{http_code}" -X PATCH \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$OWNER/$REPO/packages/container/$PKG/visibility" \
+            -d '{"visibility":"public"}')
+          echo "repo endpoint -> HTTP $code"
+
+          # 2) 兜底:org 端点(部分命名空间直接归 org 所有)
+          if [ "$code" != "204" ]; then
+            code=$(curl -sS -o /dev/null -w "%{http_code}" -X PATCH \
               -H "Authorization: Bearer $GITHUB_TOKEN" \
               -H "Accept: application/vnd.github+json" \
-              "https://api.github.com/orgs/atomlust/packages/container/atomgo/visibility" \
+              "https://api.github.com/orgs/$OWNER/packages/container/$PKG/visibility" \
               -d '{"visibility":"public"}')
-            echo "set ghcr visibility -> HTTP $code"
-            [ "$code" = "204" ] && break
-            sleep 5
+            echo "org endpoint -> HTTP $code"
+          fi
+          set -e
+
+          # 3) 自校验:匿名访问 ghcr manifest,200=公开,401=仍私有
+          for i in $(seq 1 12); do
+            v=$(curl -sS -o /dev/null -w "%{http_code}" \
+              -H "Accept: application/vnd.docker.distribution.manifest.v2+json" \
+              "https://ghcr.io/v2/$OWNER/$PKG/manifests/1.0.0")
+            echo "verify attempt $i -> HTTP $v"
+            [ "$v" = "200" ] && { echo "ghcr package is now PUBLIC"; exit 0; }
+            sleep 10
           done
+          echo "::error::ghcr package still private after PATCH. GITHUB_TOKEN may lack permission to change repo/org package visibility — use a PAT (write:packages) or set public manually in GitHub UI (Packages → atomgo → Settings → Public)."
+          exit 1
