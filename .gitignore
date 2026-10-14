@@ -59,3 +59,4 @@
 docs/multi-node-proxy.md
 docs/upstream-merge-conflicts.md
 specs
+scripts/verify_release.py
