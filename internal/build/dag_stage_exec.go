@@ -794,7 +794,7 @@ func (b *Builder) runBuildImageJob(ctx context.Context, sink run.StepSink, rep d
 				art.Metadata["digest"] = digest
 			}
 		case hasPushJob:
-			_ = rep.Log(ctx, streamStdout, "配了 push_image 但环境未绑定镜像仓库(registry),镜像留本地;到「触发设置 → 环境」绑定仓库后即自动推送")
+			_ = rep.Log(ctx, streamStdout, "配了 push_image 但环境未绑定镜像仓库(registry),镜像留本地;到「流水线配置 → 环境与凭据」给该环境绑定仓库后即自动推送(分支映射的环境名需与环境定义完全一致)")
 		}
 	}
 
