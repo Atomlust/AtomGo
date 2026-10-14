@@ -60,3 +60,7 @@ docs/multi-node-proxy.md
 docs/upstream-merge-conflicts.md
 specs
 scripts/verify_release.py
+
+# 前端构建产物(由 cd web && npm run build 生成,发布时经 goreleaser before hook 构建)
+# Go 侧 //go:embed all:web/dist 需要目录存在 —— ci.yml 会自动创建占位,release 由 npm 构建。
+web/dist/
