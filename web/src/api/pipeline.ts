@@ -1,0 +1,155 @@
+/**
+ * Pipeline API — aligns to frozen 2.2 contract.
+ *
+ * GET  /api/projects/{id}/pipeline  → PipelineDTO  (lazily creates default on first access)
+ * PUT  /api/projects/{id}/pipeline  → PipelineDTO  (needs CSRF)
+ *
+ * Frozen DTO shape: stages[].{id,name,kind,jobs[].{id,name,type,summary,config}}
+ * + yaml + status + updatedAt
+ * Post-2.2 stories only fill job.config, never change the outer shape.
+ */
+
+import { http } from './http'
+
+// ─── Domain types (frozen DTO shape) ─────────────────────────────────────────
+
+export type StageKind = 'source' | 'build' | 'deploy' | 'notify' | 'custom'
+
+export interface PipelineJob {
+  id: string
+  name: string
+  /** Free-form token; e.g. git_source | build_image | push_image | deploy_ssh | health_check | notify | custom */
+  type: string
+  /** Card subtitle — may be empty */
+  summary: string
+  /** Arbitrary KV object; free-form in this story, tightened in 2-4/2-6 */
+  config: Record<string, string>
+  /**
+   * Intra-stage job-level dependencies: IDs of other jobs *in the same stage* this
+   * job depends on. Canvas semantics — horizontal link = serial (this `needs` that);
+   * jobs with no path between them run in parallel (vertical lanes). Empty/absent =
+   * no intra-stage dependency. The engine schedules a stage's jobs by this DAG and
+   * runs independent jobs concurrently (each in its own isolated workspace).
+   */
+  needs?: string[]
+}
+
+/** Conditional execution rule (Epic 8 · 8-5). Empty = always run. */
+export interface StageWhen {
+  /** Run only if the trigger branch matches one of these globs (empty = any). */
+  branches?: string[]
+  /** Run only on these trigger types: manual | webhook | schedule (empty = any). */
+  events?: string[]
+}
+
+export interface PipelineStage {
+  id: string
+  name: string
+  kind: StageKind
+  /** Upstream stage IDs this stage depends on (Epic 8 DAG). Empty = no explicit deps. */
+  needs?: string[]
+  /** When true, this stage's failure does not block downstream stages. */
+  allowFailure?: boolean
+  /** Conditional execution; unmet → stage (and downstream) skipped. */
+  when?: StageWhen
+  /** Require manual approval before entering this stage (Epic 8 · 8-4). */
+  gate?: boolean
+  /**
+   * Matrix build axes (P1): axisName → value list. Scheduler expands to the
+   * cartesian product of parallel cells, each running this stage's jobs with
+   * `MATRIX_<AXIS>` injected as container env. Empty = no expansion (single stage).
+   */
+  matrix?: Record<string, string[]>
+  /**
+   * Stage post steps (P1 · Jenkins post): run after the stage's jobs regardless of
+   * success/failure, by condition, in the same workspace (cleanup/notify/archive).
+   */
+  post?: PipelinePostStep[]
+  /**
+   * Stage sidecar services (P1 · GitLab services): DB/redis containers on the same
+   * docker network as the script container, reachable by service name.
+   */
+  services?: PipelineServiceSpec[]
+  jobs: PipelineJob[]
+}
+
+/** A stage post step (P1). condition: always | on_success | on_failure. */
+export interface PipelinePostStep {
+  condition: 'always' | 'on_success' | 'on_failure'
+  image: string
+  commands: string[]
+  workDir?: string
+}
+
+/** A stage sidecar service (P1). Reachable by `name` on the shared network. */
+export interface PipelineServiceSpec {
+  name: string
+  image: string
+  env?: string[]
+  ports?: string[]
+}
+
+export interface PipelineDTO {
+  stages: PipelineStage[]
+  /** Server-rendered read-only YAML representation */
+  yaml: string
+  /** Always "draft" in this story */
+  status: 'draft' | string
+  updatedAt: string
+}
+
+// ─── Save request type (only stages; server derives yaml/status) ──────────────
+
+export interface SavePipelineInput {
+  stages: Array<{
+    id?: string
+    name: string
+    kind: StageKind
+    needs?: string[]
+    allowFailure?: boolean
+    when?: StageWhen
+    gate?: boolean
+    matrix?: Record<string, string[]>
+    post?: PipelinePostStep[]
+    services?: PipelineServiceSpec[]
+    jobs: Array<{
+      id?: string
+      name: string
+      type: string
+      summary?: string
+      config?: Record<string, string>
+    }>
+  }>
+}
+
+// ─── API functions ────────────────────────────────────────────────────────────
+
+export async function getPipeline(projectId: string): Promise<PipelineDTO> {
+  return http.get<PipelineDTO>(`/api/projects/${projectId}/pipeline`)
+}
+
+export async function savePipeline(
+  projectId: string,
+  input: SavePipelineInput,
+): Promise<PipelineDTO> {
+  return http.put<PipelineDTO>(`/api/projects/${projectId}/pipeline`, input)
+}
+
+// ─── Pipeline-as-code import / preview (FR-8-12) ──────────────────────────────
+
+/**
+ * Parse + validate a `.atomgo.yml` document into the pipeline model.
+ *
+ * POST /api/projects/{id}/pipeline/import  (needs CSRF)
+ * Body: { yaml, save }
+ *   - save=false (default): returns the parsed PipelineDTO as a preview, does NOT persist.
+ *   - save=true: persists the parsed spec via the same Save path as the canvas PUT.
+ * Validation failures surface as HttpError 422 with codes invalid_yaml/invalid_stage/...
+ */
+export async function importPipeline(
+  projectId: string,
+  yaml: string,
+  save = false,
+): Promise<PipelineDTO> {
+  return http.post<PipelineDTO>(`/api/projects/${projectId}/pipeline/import`, { yaml, save })
+}

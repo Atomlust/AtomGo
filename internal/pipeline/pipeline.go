@@ -1,0 +1,651 @@
+// Package pipeline 是「流水线配置编辑器与编排画布」的领域层(UX-DR5 / 部分 FR-9 / Story 2.2)。
+//
+// 每个项目持有一份声明式流水线配置:结构化 spec(阶段 → 任务)+ 服务端渲染的只读 YAML
+// 文本。首次访问无配置时惰性生成默认种子(源阶段引用项目仓库 + 空的 构建/部署/通知
+// 三阶段),并以 INSERT ON CONFLICT(project_id) DO NOTHING + 回读权威行兜住并发首访竞态
+// (仿 trigger.createDefault)。
+//
+// 保存(Save)做结构校验(阶段名非空、kind∈枚举、任务名非空、type 非空、stage/job id
+// 全局不重复)→ 规范化(trim、补空 id)→ 渲染 YAML → 持久化(status 恒 draft)→ 回读。
+// 完整引用存在性校验(凭据/服务器/镜像仓库)留 Story 2-6;本期 job.config 为自由 KV。
+//
+// 本期 spec 不存任何明文 secret(凭据走保险库引用,2-4 才落引用字段)。
+// 领域包无 init() 副作用、无包级重对象,避免抬高空载内存。
+package pipeline
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/atomlust/atomgo/internal/dag"
+	"github.com/atomlust/atomgo/internal/store"
+	yaml "gopkg.in/yaml.v3"
+)
+
+// 阶段 kind 枚举(DB 存于 spec_json;JSON 字段 camelCase)。
+const (
+	// KindSource 表示流水线源阶段(引用项目仓库)。
+	KindSource = "source"
+	// KindBuild 表示构建阶段。
+	KindBuild = "build"
+	// KindDeploy 表示部署阶段。
+	KindDeploy = "deploy"
+	// KindNotify 表示通知阶段。
+	KindNotify = "notify"
+	// KindCustom 表示自定义阶段。
+	KindCustom = "custom"
+)
+
+// statusDraft 是本期唯一发布状态(active/发布 = 后续 story)。
+const statusDraft = "draft"
+
+// 领域错误。错误体不含任何明文 secret。
+var (
+	// ErrProjectNotFound 表示引用的项目不存在。
+	ErrProjectNotFound = errors.New("pipeline: project not found")
+	// ErrInvalidStage 表示阶段校验失败(阶段名空 / kind 非枚举)。
+	ErrInvalidStage = errors.New("pipeline: invalid stage")
+	// ErrInvalidJob 表示任务校验失败(任务名空 / type 空)。
+	ErrInvalidJob = errors.New("pipeline: invalid job")
+	// ErrDuplicateID 表示 stage/job id 全局重复。
+	ErrDuplicateID = errors.New("pipeline: duplicate id")
+)
+
+// Job 是一个任务(阶段下的最小编排单元)。Config 为自由 KV(本期任意结构;
+// 2-4/2-6 才在内填强 schema)。Summary 为卡片副标题展示文本(可空)。
+//
+// Needs 是该 job 依赖的「同阶段内」其他 job 的 ID 列表,构成**阶段内 job 级 DAG**:
+// 画布上横向连线=串行(依赖)、纵向并排=并行(无依赖)。为空=该 job 在阶段内无前置依赖。
+// 当某阶段**任一 job** 声明 needs 时,执行层按 job 级 DAG 调度(无依赖 job 并发跑);
+// 整阶段无任何 job needs 时退化为既有「按类型分组串行」(向后兼容存量流水线)。
+// needs 只能引用同阶段内的 job,不可自指 / 成环(保存期校验,见 validateJobDAG)。
+type Job struct {
+	ID      string         `json:"id"`
+	Name    string         `json:"name"`
+	Type    string         `json:"type"`
+	Summary string         `json:"summary"`
+	Config  map[string]any `json:"config"`
+	Needs   []string       `json:"needs,omitempty"`
+}
+
+// Stage 是一个阶段(阶段列),含若干 Job。Kind 为 kind 枚举之一。
+//
+// Needs 是该阶段依赖的上游阶段 ID 列表(Epic 8 · Story 8-1,构成 DAG):为空表示「无显式依赖」。
+// 当**整个流水线**无任何阶段声明 needs 时,执行层按声明序退化为线性(向后兼容存量「直线」流水线);
+// 一旦有阶段声明 needs,则严格按声明的 DAG 调度(见 dagrun 适配)。AllowFailure 为 true 时,
+// 该阶段失败仍放行下游(自身仍记 failed)。Needs 在保存时校验:引用必须存在、不可自指、不可成环。
+type Stage struct {
+	ID           string   `json:"id"`
+	Name         string   `json:"name"`
+	Kind         string   `json:"kind"`
+	Needs        []string `json:"needs,omitempty"`
+	AllowFailure bool     `json:"allowFailure,omitempty"`
+	When         When     `json:"when,omitempty"`
+	// Gate 为 true 时,进入该阶段前需人工审批(Story 8-4):运行阻塞、状态置 waiting_approval,
+	// 批准→继续,拒绝→该阶段失败(运行终止)。
+	Gate bool `json:"gate,omitempty"`
+	// Matrix 声明矩阵构建轴(P1,对标 GHA matrix / GitLab parallel:matrix):
+	// 多维 axisName→值列表,调度时展开成笛卡尔积的多个并行 cell(各跑该阶段 jobs 副本),
+	// axis 值以 `MATRIX_<AXIS>`(大写)注入 cell 各 script job 的容器环境供命令引用。
+	// 空(nil / 无轴)= 行为不变(单 stage)。校验/展开见 stage_matrix.go 与 dagrun.ExpandMatrix。
+	Matrix map[string][]string `json:"matrix,omitempty"`
+	// Post 是阶段「后置步骤」(P1,对标 Jenkins post / GitLab after_script):阶段的 job 跑完后
+	// **无论成功失败都按条件执行**,在同一克隆工作区运行(可访问构建产物),用于清理 / 通知 / 归档日志。
+	// 空 = 行为不变。校验/执行见 stage_post.go 与 dag_stage_exec.go runStagePost。
+	Post []PostStep `json:"post,omitempty"`
+	// Services 是阶段「旁挂服务」(P1,对标 GitLab services / Woodpecker services):测试旁挂
+	// DB/redis 等容器,与脚本容器同 docker 网络、按服务名互访(testdb:5432)。空 = 行为不变。
+	// 校验/执行见 stage_services.go 与 dag_stage_exec.go runStageServices。
+	Services []ServiceSpec `json:"services,omitempty"`
+	Jobs     []Job         `json:"jobs"`
+}
+
+// Spec 是流水线编排声明式配置(阶段集合)。
+type Spec struct {
+	Stages []Stage `json:"stages"`
+}
+
+// Config 是流水线配置领域模型(spec + 渲染 YAML + 状态 + 更新时间)。
+type Config struct {
+	Spec      Spec
+	YAML      string
+	Status    string
+	UpdatedAt time.Time
+	SavedAt   *time.Time
+}
+
+// Service 定义流水线配置领域对外接口。
+type Service interface {
+	// Get 返回项目流水线配置。首次访问无配置时惰性生成默认种子并返回。
+	// 项目不存在 → ErrProjectNotFound。
+	Get(ctx context.Context, projectID string) (*Config, error)
+	// Save 校验并规范化 spec → 渲染 YAML → 持久化(status=draft)→ 回读返回。
+	// 校验失败 → ErrInvalidStage / ErrInvalidJob / ErrDuplicateID;项目不存在 → ErrProjectNotFound。
+	Save(ctx context.Context, projectID string, spec Spec) (*Config, error)
+}
+
+// StatusDraft 是本期唯一发布状态(导出供 pipelineyaml 等同包域外构造 Config 时复用)。
+const StatusDraft = statusDraft
+
+// NormalizeSpec 校验并规范化 spec(导出包装 normalizeSpec):trim、补空 id、Config nil 补 {}、
+// 阶段名/kind 枚举/任务名/type 非空、id 全局唯一、恰一个 source 阶段、needs 存在性/自指/环检测。
+// 供「流水线即代码」(pipelineyaml)等域外入口走同一套校验,不另起规则。
+func NormalizeSpec(in Spec) (Spec, error) { return normalizeSpec(in) }
+
+// RenderYAML 把 spec 渲染为确定性 YAML 文本(导出包装 renderYAML),供导入预览回填规范 YAML。
+func RenderYAML(spec Spec) (string, error) { return renderYAML(spec) }
+
+// service 是 store 支撑的 Service 实现。
+type service struct {
+	db *sql.DB
+}
+
+// New 构造 Service(经参数化 SQL 触库)。不在此做任何重活
+// (无 init() 副作用、无包级重对象,避免抬高空载内存)。
+func New(db *sql.DB) Service {
+	return &service{db: db}
+}
+
+func (s *service) Get(ctx context.Context, projectID string) (*Config, error) {
+	cfg, err := s.load(ctx, projectID)
+	if err == nil {
+		// 给 git_source 任务预填项目绑定的仓库/分支/凭据(字段留空时)+ 卡片摘要,
+		// 使画布源节点直接展示项目源码信息(经 YAML 导入/手编保存的 source 任务常为空)。
+		s.fillSourceDefaults(ctx, projectID, &cfg.Spec)
+		return cfg, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return nil, err
+	}
+	// 首次访问无配置:惰性生成默认种子。
+	return s.createDefault(ctx, projectID)
+}
+
+// fillSourceDefaults 为 git_source 任务预填项目绑定的仓库/分支/凭据(仅当对应字段为空,
+// 不覆盖用户显式覆盖)并补上「仓库 · 分支」卡片摘要。展示层补全:让源节点直观显示项目源码;
+// 项目信息读取失败则静默跳过,不阻断流水线返回。
+func (s *service) fillSourceDefaults(ctx context.Context, projectID string, spec *Spec) {
+	var repoURL, branch, credID string
+	loaded := false
+	load := func() {
+		if loaded {
+			return
+		}
+		loaded = true
+		_ = s.db.QueryRowContext(ctx,
+			`SELECT repo_url, default_branch, credential_id FROM projects WHERE id = ?`, projectID,
+		).Scan(&repoURL, &branch, &credID)
+	}
+	asStr := func(v any) string { s, _ := v.(string); return strings.TrimSpace(s) }
+	for i := range spec.Stages {
+		for j := range spec.Stages[i].Jobs {
+			job := &spec.Stages[i].Jobs[j]
+			if job.Type != "git_source" {
+				continue
+			}
+			load()
+			if job.Config == nil {
+				job.Config = map[string]any{}
+			}
+			if repoURL != "" && asStr(job.Config["repoUrl"]) == "" {
+				job.Config["repoUrl"] = repoURL
+			}
+			if branch != "" && asStr(job.Config["branch"]) == "" {
+				job.Config["branch"] = branch
+			}
+			if credID != "" && asStr(job.Config["credentialId"]) == "" {
+				job.Config["credentialId"] = credID
+			}
+			if strings.TrimSpace(job.Summary) == "" {
+				b := branch
+				if b == "" {
+					b = "main"
+				}
+				if repoURL != "" {
+					job.Summary = repoURL + " · " + b
+				} else {
+					job.Summary = b + " · push/tag/PR"
+				}
+			}
+		}
+	}
+}
+
+func (s *service) Save(ctx context.Context, projectID string, spec Spec) (*Config, error) {
+	// 确保配置已存在(惰性默认);Get 也完成项目存在性校验。
+	if _, err := s.Get(ctx, projectID); err != nil {
+		return nil, err
+	}
+
+	normalized, err := normalizeSpec(spec)
+	if err != nil {
+		return nil, err
+	}
+
+	specJSON, err := json.Marshal(normalized)
+	if err != nil {
+		return nil, fmt.Errorf("pipeline: marshal spec: %w", err)
+	}
+	renderedYAML, err := renderYAML(normalized)
+	if err != nil {
+		return nil, err
+	}
+
+	nowStr := time.Now().UTC().Format(time.RFC3339)
+	_, err = s.db.ExecContext(ctx,
+		`UPDATE pipeline_configs
+		 SET spec_json = ?, spec_yaml = ?, status = ?, updated_at = ?, saved_at = ?
+		 WHERE project_id = ?`,
+		string(specJSON), renderedYAML, statusDraft, nowStr, nowStr, projectID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("pipeline: update config: %w", err)
+	}
+	return s.Get(ctx, projectID)
+}
+
+// load 读取已存在的配置行。无行 → sql.ErrNoRows(由 Get 转惰性默认)。
+func (s *service) load(ctx context.Context, projectID string) (*Config, error) {
+	var (
+		specJSON   string
+		specYAML   string
+		status     string
+		updatedStr string
+		savedStr   sql.NullString
+	)
+	err := s.db.QueryRowContext(ctx,
+		`SELECT spec_json, spec_yaml, status, updated_at, saved_at
+		 FROM pipeline_configs WHERE project_id = ?`, projectID,
+	).Scan(&specJSON, &specYAML, &status, &updatedStr, &savedStr)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, sql.ErrNoRows
+		}
+		return nil, fmt.Errorf("pipeline: load config: %w", err)
+	}
+
+	var spec Spec
+	if strings.TrimSpace(specJSON) != "" {
+		if err := json.Unmarshal([]byte(specJSON), &spec); err != nil {
+			return nil, fmt.Errorf("pipeline: parse spec: %w", err)
+		}
+	}
+	normalizeSpecShape(&spec)
+
+	updated, err := time.Parse(time.RFC3339, updatedStr)
+	if err != nil {
+		return nil, fmt.Errorf("pipeline: parse updated_at: %w", err)
+	}
+	cfg := &Config{Spec: spec, YAML: specYAML, Status: status, UpdatedAt: updated}
+	if savedStr.Valid {
+		saved, err := time.Parse(time.RFC3339, savedStr.String)
+		if err != nil {
+			return nil, fmt.Errorf("pipeline: parse saved_at: %w", err)
+		}
+		cfg.SavedAt = &saved
+	}
+	return cfg, nil
+}
+
+// LoadExisting reads persisted configuration without creating defaults or filling source fields.
+// A missing configuration returns sql.ErrNoRows; storage and decoding errors are preserved.
+func LoadExisting(ctx context.Context, db *sql.DB, projectID string) (*Config, error) {
+	return (&service{db: db}).load(ctx, projectID)
+}
+
+// createDefault 惰性生成项目默认流水线配置:源阶段(1 个 git_source 任务引用项目仓库)
+// + 空的 构建/部署/通知 三阶段。项目不存在 → ErrProjectNotFound。
+// 并发首访同项目时 ON CONFLICT DO NOTHING + 回读权威行,防双方各持不同种子。
+func (s *service) createDefault(ctx context.Context, projectID string) (*Config, error) {
+	summary, err := s.sourceSummary(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+
+	spec := defaultSpec(summary)
+	specJSON, err := json.Marshal(spec)
+	if err != nil {
+		return nil, fmt.Errorf("pipeline: marshal default spec: %w", err)
+	}
+	renderedYAML, err := renderYAML(spec)
+	if err != nil {
+		return nil, err
+	}
+
+	now := time.Now().UTC()
+	nowStr := now.Format(time.RFC3339)
+	_, err = s.db.ExecContext(ctx,
+		`INSERT INTO pipeline_configs (project_id, spec_json, spec_yaml, status, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?) `+
+			store.DoNothingSuffix(store.DialectOf(s.db), []string{"project_id"}),
+		projectID, string(specJSON), renderedYAML, statusDraft, nowStr, nowStr,
+	)
+	if err != nil {
+		if isForeignKeyErr(err) {
+			return nil, ErrProjectNotFound
+		}
+		return nil, fmt.Errorf("pipeline: insert default config: %w", err)
+	}
+
+	// 不管本协程是否赢得插入,统一回读权威行(并发竞态下另一协程可能已写入)。
+	// 若回读时行已被并发删除(如项目级联删),映射为 ErrProjectNotFound 而非裸 sql.ErrNoRows,
+	// 避免 writePipelineError 落到默认 500(与兄弟 settingsService 一致)。
+	cfg, err := s.load(ctx, projectID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrProjectNotFound
+	}
+	return cfg, err
+}
+
+// sourceSummary 读取项目仓库信息拼出源阶段任务摘要;项目不存在 → ErrProjectNotFound。
+// 仓库信息读取失败时退化为通用摘要(不阻断惰性默认生成)。
+func (s *service) sourceSummary(ctx context.Context, projectID string) (string, error) {
+	var repoURL, defaultBranch string
+	err := s.db.QueryRowContext(ctx,
+		`SELECT repo_url, default_branch FROM projects WHERE id = ?`, projectID,
+	).Scan(&repoURL, &defaultBranch)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", ErrProjectNotFound
+		}
+		return "", fmt.Errorf("pipeline: load project: %w", err)
+	}
+	branch := strings.TrimSpace(defaultBranch)
+	if branch == "" {
+		branch = "main"
+	}
+	repo := strings.TrimSpace(repoURL)
+	if repo == "" {
+		return branch + " · push/tag/PR", nil
+	}
+	return repo + " · " + branch, nil
+}
+
+// defaultSpec 构造默认种子:仅 源阶段(git_source 引用项目仓库)+ 空构建阶段。
+// 部署/通知等阶段不再预置——按需由用户「+添加阶段」动态加入,空阶段不写死、不冒充已配置
+// (空阶段既不展示为「已执行步骤」,也不在拓扑图里画出,见 dagrun 与 runDag)。
+func defaultSpec(sourceSummary string) Spec {
+	return Spec{Stages: []Stage{
+		{
+			ID:   "stg_src",
+			Name: "流水线源",
+			Kind: KindSource,
+			Jobs: []Job{{
+				ID:      "job_src",
+				Name:    "Gitee 源",
+				Type:    "git_source",
+				Summary: sourceSummary,
+				Config:  map[string]any{},
+			}},
+		},
+		{ID: "stg_build", Name: "构建", Kind: KindBuild, Jobs: []Job{}},
+	}}
+}
+
+// normalizeSpec 校验并规范化 spec:trim 各字段、补空 id(uuid)、Config nil 补 {}、
+// 校验阶段名非空 / kind 枚举 / 任务名非空 / type 非空 / stage+job id 全局不重复。
+func normalizeSpec(in Spec) (Spec, error) {
+	out := Spec{Stages: make([]Stage, 0, len(in.Stages))}
+	seen := make(map[string]struct{})
+
+	for _, st := range in.Stages {
+		name := strings.TrimSpace(st.Name)
+		if name == "" {
+			return Spec{}, fmt.Errorf("%w: stage name must not be empty", ErrInvalidStage)
+		}
+		kind := strings.TrimSpace(st.Kind)
+		if !isValidKind(kind) {
+			return Spec{}, fmt.Errorf("%w: invalid kind %q", ErrInvalidStage, st.Kind)
+		}
+		stageID := strings.TrimSpace(st.ID)
+		if stageID == "" {
+			stageID = uuid.NewString()
+		}
+		if _, dup := seen[stageID]; dup {
+			return Spec{}, fmt.Errorf("%w: stage id %q", ErrDuplicateID, stageID)
+		}
+		seen[stageID] = struct{}{}
+
+		jobs := make([]Job, 0, len(st.Jobs))
+		for _, jb := range st.Jobs {
+			jobName := strings.TrimSpace(jb.Name)
+			if jobName == "" {
+				return Spec{}, fmt.Errorf("%w: job name must not be empty", ErrInvalidJob)
+			}
+			jobType := strings.TrimSpace(jb.Type)
+			if jobType == "" {
+				return Spec{}, fmt.Errorf("%w: job type must not be empty", ErrInvalidJob)
+			}
+			jobID := strings.TrimSpace(jb.ID)
+			if jobID == "" {
+				jobID = uuid.NewString()
+			}
+			if _, dup := seen[jobID]; dup {
+				return Spec{}, fmt.Errorf("%w: job id %q", ErrDuplicateID, jobID)
+			}
+			seen[jobID] = struct{}{}
+
+			cfg := jb.Config
+			if cfg == nil {
+				cfg = map[string]any{}
+			}
+			jobs = append(jobs, Job{
+				ID:      jobID,
+				Name:    jobName,
+				Type:    jobType,
+				Summary: strings.TrimSpace(jb.Summary),
+				Config:  cfg,
+				Needs:   normalizeNeeds(jb.Needs),
+			})
+		}
+
+		// 阶段内 job 依赖校验:引用须为同阶段 job、不自指、不成环(阶段内 job 级 DAG)。
+		// 复用 dag 构造期校验(Kahn 环检测),错误归一为 ErrInvalidJob(不外泄内部细节)。
+		if err := validateJobDAG(jobs); err != nil {
+			return Spec{}, err
+		}
+
+		// Needs 规范化:trim、去空、去重、剔除自指(自指交由 dag 校验报错以给明确信息)。
+		needs := normalizeNeeds(st.Needs)
+
+		// Matrix 规范化 + 校验(轴名合法 / 值非空 / 维度·cell 数上限):空 → nil(行为不变)。
+		matrix, merr := normalizeMatrix(st.Matrix)
+		if merr != nil {
+			return Spec{}, merr
+		}
+
+		// Post 后置步骤规范化 + 校验(condition 枚举 / image+commands 非空):空 → nil(行为不变)。
+		post, perr := normalizePost(st.Post)
+		if perr != nil {
+			return Spec{}, perr
+		}
+
+		// Services 旁挂服务规范化 + 校验(服务名标识符/唯一、image 非空):空 → nil(行为不变)。
+		services, serr := normalizeServices(st.Services)
+		if serr != nil {
+			return Spec{}, serr
+		}
+
+		out.Stages = append(out.Stages, Stage{ID: stageID, Name: name, Kind: kind, Needs: needs, AllowFailure: st.AllowFailure, When: normalizeWhen(st.When), Gate: st.Gate, Matrix: matrix, Post: post, Services: services, Jobs: jobs})
+	}
+
+	// 源阶段不变式:流水线必须恰有一个 source 阶段(引用项目仓库)。前端不渲染删源阶段的入口,
+	// 但 API 层须守住此不变式——否则 PUT `{"stages":[]}` 或漏传源阶段会静默抹除仓库引用。
+	sourceCount := 0
+	for _, st := range out.Stages {
+		if st.Kind == KindSource {
+			sourceCount++
+		}
+	}
+	if sourceCount != 1 {
+		return Spec{}, fmt.Errorf("%w: pipeline must have exactly one source stage", ErrInvalidStage)
+	}
+
+	// 阶段依赖(needs)校验:引用必须存在、不可自指、不可成环(Epic 8 · 8-1)。
+	// 复用 dag 的构造期校验(Kahn 环检测),把其错误归一为 ErrInvalidStage(不外泄内部细节)。
+	if err := validateStageDAG(out.Stages); err != nil {
+		return Spec{}, err
+	}
+
+	return out, nil
+}
+
+// normalizeNeeds 规范化阶段依赖列表:trim、剔空、去重(保留首次出现序)。
+func normalizeNeeds(in []string) []string {
+	if len(in) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(in))
+	out := make([]string, 0, len(in))
+	for _, d := range in {
+		d = strings.TrimSpace(d)
+		if d == "" {
+			continue
+		}
+		if _, ok := seen[d]; ok {
+			continue
+		}
+		seen[d] = struct{}{}
+		out = append(out, d)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// validateStageDAG 用 dag 包做阶段依赖的构造期校验(存在性 + 自指 + 环)。
+// 任一问题归一为 ErrInvalidStage(附简短原因,不外泄底层细节)。
+func validateStageDAG(stages []Stage) error {
+	nodes := make([]dag.Node, 0, len(stages))
+	for _, st := range stages {
+		nodes = append(nodes, dag.Node{ID: st.ID, Needs: st.Needs, AllowFailure: st.AllowFailure})
+	}
+	if _, err := dag.New(nodes); err != nil {
+		switch {
+		case errors.Is(err, dag.ErrUnknownDep):
+			return fmt.Errorf("%w: stage needs reference an unknown stage", ErrInvalidStage)
+		case errors.Is(err, dag.ErrSelfDep):
+			return fmt.Errorf("%w: stage must not depend on itself", ErrInvalidStage)
+		case errors.Is(err, dag.ErrCycle):
+			return fmt.Errorf("%w: stage dependencies form a cycle", ErrInvalidStage)
+		default:
+			return fmt.Errorf("%w: invalid stage dependencies", ErrInvalidStage)
+		}
+	}
+	return nil
+}
+
+// validateJobDAG 用 dag 包做「阶段内」job 依赖的构造期校验(存在性 + 自指 + 环)。
+// 与 validateStageDAG 同构,但作用域限于单个阶段的 jobs,错误归一为 ErrInvalidJob。
+func validateJobDAG(jobs []Job) error {
+	// 无任何 job 声明 needs → 不构图(向后兼容:阶段内扁平 job 列表无需 DAG 校验)。
+	hasNeeds := false
+	for _, jb := range jobs {
+		if len(jb.Needs) > 0 {
+			hasNeeds = true
+			break
+		}
+	}
+	if !hasNeeds {
+		return nil
+	}
+	nodes := make([]dag.Node, 0, len(jobs))
+	for _, jb := range jobs {
+		nodes = append(nodes, dag.Node{ID: jb.ID, Needs: jb.Needs})
+	}
+	if _, err := dag.New(nodes); err != nil {
+		switch {
+		case errors.Is(err, dag.ErrUnknownDep):
+			return fmt.Errorf("%w: job needs reference an unknown job in the stage", ErrInvalidJob)
+		case errors.Is(err, dag.ErrSelfDep):
+			return fmt.Errorf("%w: job must not depend on itself", ErrInvalidJob)
+		case errors.Is(err, dag.ErrCycle):
+			return fmt.Errorf("%w: job dependencies form a cycle", ErrInvalidJob)
+		default:
+			return fmt.Errorf("%w: invalid job dependencies", ErrInvalidJob)
+		}
+	}
+	return nil
+}
+
+// normalizeSpecShape 保证从库回读的 spec 切片/map 非 nil(JSON 输出为 [] / {} 而非 null)。
+func normalizeSpecShape(spec *Spec) {
+	if spec.Stages == nil {
+		spec.Stages = []Stage{}
+	}
+	for i := range spec.Stages {
+		if spec.Stages[i].Jobs == nil {
+			spec.Stages[i].Jobs = []Job{}
+		}
+		for j := range spec.Stages[i].Jobs {
+			if spec.Stages[i].Jobs[j].Config == nil {
+				spec.Stages[i].Jobs[j].Config = map[string]any{}
+			}
+		}
+	}
+}
+
+// isValidKind 判断 kind 是否为枚举之一。
+func isValidKind(kind string) bool {
+	switch kind {
+	case KindSource, KindBuild, KindDeploy, KindNotify, KindCustom:
+		return true
+	default:
+		return false
+	}
+}
+
+// yamlSpec / yamlStage / yamlJob 是 YAML 渲染用的稳定形状(确定性字段顺序;
+// 仅用于展示/导出,与持久化 JSON 解耦)。
+type yamlSpec struct {
+	Stages []yamlStage `yaml:"stages"`
+}
+
+type yamlStage struct {
+	Name string    `yaml:"name"`
+	Kind string    `yaml:"kind"`
+	Jobs []yamlJob `yaml:"jobs"`
+}
+
+type yamlJob struct {
+	Name    string         `yaml:"name"`
+	Type    string         `yaml:"type"`
+	Summary string         `yaml:"summary,omitempty"`
+	Config  map[string]any `yaml:"config,omitempty"`
+}
+
+// renderYAML 把 spec 渲染为确定性 YAML 文本(供"查看源码"/导出)。
+func renderYAML(spec Spec) (string, error) {
+	ys := yamlSpec{Stages: make([]yamlStage, 0, len(spec.Stages))}
+	for _, st := range spec.Stages {
+		jobs := make([]yamlJob, 0, len(st.Jobs))
+		for _, jb := range st.Jobs {
+			var cfg map[string]any
+			if len(jb.Config) > 0 {
+				cfg = jb.Config
+			}
+			jobs = append(jobs, yamlJob{
+				Name:    jb.Name,
+				Type:    jb.Type,
+				Summary: jb.Summary,
+				Config:  cfg,
+			})
+		}
+		ys.Stages = append(ys.Stages, yamlStage{Name: st.Name, Kind: st.Kind, Jobs: jobs})
+	}
+	out, err := yaml.Marshal(ys)
+	if err != nil {
+		return "", fmt.Errorf("pipeline: render yaml: %w", err)
+	}
+	return string(out), nil
+}
+
+// isForeignKeyErr 判断错误是否为外键约束失败(modernc sqlite 文本含 FOREIGN KEY)。
+func isForeignKeyErr(err error) bool { return store.IsForeignKeyErr(err) }

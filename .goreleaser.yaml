@@ -1,0 +1,141 @@
+# GoReleaser 发版配置:推 v* tag → 跨平台静态二进制 + 校验和 + changelog → GitHub Release;
+# 同时构建 linux amd64/arm64 镜像并合并为多架构清单推 ghcr.io。
+# 本地干跑(含真建 docker,需本机 docker daemon):goreleaser release --snapshot --clean --skip=publish
+# 仅二进制/不建镜像:再加 --skip=docker;校验配置:goreleaser check
+version: 2
+
+project_name: atomgo
+
+before:
+  hooks:
+    - go mod download
+    # 前端先构建,供 go:embed(web/dist)。各架构二进制共享同一份与平台无关的前端产物。
+    - bash -c "cd web && npm ci && npm run build"
+
+builds:
+  - id: atomgo
+    main: ./cmd/atomgo
+    binary: atomgo
+    env:
+      - CGO_ENABLED=0 # modernc sqlite + go-sql-driver/mysql 均纯 Go,可纯静态交叉编译
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    mod_timestamp: "{{ .CommitTimestamp }}" # 可复现构建
+    ldflags:
+      - -s -w
+      - -X github.com/atomlust/atomgo/internal/version.Version={{ .Version }}
+      - -X github.com/atomlust/atomgo/internal/version.Commit={{ .ShortCommit }}
+      - -X github.com/atomlust/atomgo/internal/version.Date={{ .CommitDate }}
+
+archives:
+  - id: default
+    formats: [tar.gz]
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - README.md
+      - LICENSE
+      - SECURITY.md
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  sort: asc
+  use: github
+  groups:
+    - title: 🚀 新功能
+      regexp: '^.*?feat(\(.+\))??!?:.+$'
+      order: 0
+    - title: 🐛 修复
+      regexp: '^.*?fix(\(.+\))??!?:.+$'
+      order: 1
+    - title: ⚡ 性能
+      regexp: '^.*?perf(\(.+\))??!?:.+$'
+      order: 2
+    - title: 其它
+      order: 999
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "^ci:"
+      - "^style:"
+      - Merge pull request
+      - Merge branch
+
+# 每架构单独构建单平台镜像(二进制在 context 根名为 atomgo,与 Dockerfile.goreleaser 匹配),
+# 再由 docker_manifests 合并为多架构清单。注:dockers_v2 一次构建多平台时二进制不落 context 根,
+# COPY 会失败,故用经典 dockers(弃用告警仅提示,功能稳定)。
+dockers:
+  - id: amd64
+    goos: linux
+    goarch: amd64
+    dockerfile: Dockerfile.goreleaser
+    use: buildx
+    image_templates:
+      - "ghcr.io/atomlust/atomgo:{{ .Version }}-amd64"
+    build_flag_templates:
+      - "--platform=linux/amd64"
+      - "--label=org.opencontainers.image.title={{ .ProjectName }}"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
+      - "--label=org.opencontainers.image.source=https://github.com/atomlust/atomgo"
+      - "--label=org.opencontainers.image.licenses=MIT"
+  - id: arm64
+    goos: linux
+    goarch: arm64
+    dockerfile: Dockerfile.goreleaser
+    use: buildx
+    image_templates:
+      - "ghcr.io/atomlust/atomgo:{{ .Version }}-arm64"
+    build_flag_templates:
+      - "--platform=linux/arm64"
+      - "--label=org.opencontainers.image.title={{ .ProjectName }}"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
+      - "--label=org.opencontainers.image.source=https://github.com/atomlust/atomgo"
+      - "--label=org.opencontainers.image.licenses=MIT"
+
+docker_manifests:
+  - name_template: "ghcr.io/atomlust/atomgo:{{ .Version }}"
+    image_templates:
+      - "ghcr.io/atomlust/atomgo:{{ .Version }}-amd64"
+      - "ghcr.io/atomlust/atomgo:{{ .Version }}-arm64"
+  # latest 仅正式版推送(预发布 tag 自动跳过)。
+  - name_template: "ghcr.io/atomlust/atomgo:latest"
+    skip_push: auto
+    image_templates:
+      - "ghcr.io/atomlust/atomgo:{{ .Version }}-amd64"
+      - "ghcr.io/atomlust/atomgo:{{ .Version }}-arm64"
+
+release:
+  github:
+    owner: atomlust
+    name: atomgo
+  draft: false
+  # 含 -rc/-beta 等预发布标识的 tag 自动标记为 prerelease。
+  prerelease: auto
+  name_template: "AtomGo {{ .Tag }}"
+  footer: |
+    ---
+    ## 安装
+
+    一键安装(Linux / macOS):
+    ```sh
+    curl -fsSL https://raw.githubusercontent.com/atomlust/atomgo/master/install.sh | sh
+    ```
+
+    Docker:
+    ```sh
+    docker run -d -p 8080:8080 -v atomgo-data:/data ghcr.io/atomlust/atomgo:{{ .Version }}
+    ```

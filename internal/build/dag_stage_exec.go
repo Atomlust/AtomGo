@@ -1,0 +1,1154 @@
+package build
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strconv"
+	"strings"
+	"sync"
+
+	"github.com/atomlust/atomgo/internal/dag"
+	"github.com/atomlust/atomgo/internal/dagrun"
+	"github.com/atomlust/atomgo/internal/deploy"
+	"github.com/atomlust/atomgo/internal/notify"
+	"github.com/atomlust/atomgo/internal/pipeline"
+	"github.com/atomlust/atomgo/internal/project"
+	"github.com/atomlust/atomgo/internal/run"
+	"github.com/atomlust/atomgo/internal/vault"
+)
+
+// dag_stage_exec.go 是 DAG 调度器(dagrun)的**真实阶段执行器**(Epic 8 · Story 8-2)。
+//
+// dagrun.Runner 按阶段 DAG 编排;本文件提供「单个阶段怎么执行」的真实实现:复用 Builder 的
+// 容器基建(cloner + driver.RunToolchain)在隔离容器内真实跑 script 类型 job 的命令,而非 stub。
+//
+// 执行模型(自包含、并行安全):每个含 script job 的阶段**独立克隆一份临时工作区**(即用即销),
+// 在其中按 job 声明序逐个执行 script job 的命令(多行 → set -e 单脚本 → 容器内 sh -c)。
+// 不同阶段并行执行时各持各的工作区,互不干扰;宿主零落地(RunToolchain = docker run --rm)。
+//
+// job.Config 取值(对齐前端节点表单的 script 类型字段):image(必填)、commands(多行,必填)、
+// workDir(可选,相对工作区根)。非 script/custom 类型的 job 本期不做真实执行(build_image/
+// push_image/deploy_ssh 的真实化是后续 increment),仅打一行诚实占位日志后放行——**不冒充**
+// 真实构建/部署。
+//
+// 安全边界(复用 runScriptStep 的铁律):脚本只在隔离容器跑、绝不在宿主执行;命令注入防护
+// (宿主侧 array,用户命令仅容器内 sh 解释);ctx 取消即 kill;secret 注入但出网/落库脱敏。
+//
+// 工作区共享(跨阶段复用同一 clone)是性能优化项,留后续;本期每阶段独立 clone 以求简单与并行安全。
+
+// scriptJobTypes 是会触发真实容器执行的 job 类型。build_frontend/build_backend 是「前端/后端构建」
+// 模板节点,本质是带预填命令的 script;templated 是「用户自定义节点」(参数 + 命令模板),
+// 渲染 {{参数}} 后同样在隔离容器跑。三者都按 script 路径执行(容器跑 + 收 artifactPath 产物)。
+func isScriptJob(jobType string) bool {
+	t := strings.TrimSpace(jobType)
+	return t == pipeline.StepTypeScript || t == "custom" || t == "build_frontend" || t == "build_backend" || t == "templated"
+}
+
+// tplPlaceholder 匹配 {{key}} 占位(key 为标识符)。自定义节点参数渲染用。
+var tplPlaceholder = regexp.MustCompile(`\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}`)
+
+// templateContext 收集自定义节点的渲染上下文:config 里的字符串值 + 自由「参数表」(params 字段,
+// 每行 `key=value` 或 `key: value`)。参数完全自由(用户随便定义键),不锁死 schema。
+func templateContext(cfg map[string]any) map[string]string {
+	ctx := make(map[string]string, len(cfg)+4)
+	for k, v := range cfg {
+		if s, ok := v.(string); ok {
+			ctx[k] = s
+		}
+	}
+	for _, line := range splitCommands(cfgString(cfg, "params")) {
+		i := strings.IndexAny(line, "=:")
+		if i <= 0 {
+			continue
+		}
+		if k := strings.TrimSpace(line[:i]); k != "" {
+			ctx[k] = strings.TrimSpace(line[i+1:])
+		}
+	}
+	return ctx
+}
+
+// renderTemplate 把 {{key}} 替换为 ctx[key]。未知占位原样保留(不报错;$ENV 交给容器内 shell;
+// 无 {{ 则零开销直返)。ctx 由 templateContext 收集(config 字段 + params 自由参数)。
+func renderTemplate(tpl string, ctx map[string]string) string {
+	if tpl == "" || !strings.Contains(tpl, "{{") {
+		return tpl
+	}
+	return tplPlaceholder.ReplaceAllStringFunc(tpl, func(m string) string {
+		key := tplPlaceholder.FindStringSubmatch(m)[1]
+		if v, ok := ctx[key]; ok {
+			return v
+		}
+		return m
+	})
+}
+
+// isDeployJob 判断是否「SSH 部署」类节点(deploy_ssh 通用 / deploy_frontend 前端部署模板)。
+func isDeployJob(jobType string) bool {
+	t := strings.TrimSpace(jobType)
+	return t == "deploy_ssh" || t == "deploy_frontend"
+}
+
+// isBuildImageJob 判断是否「构建产物(镜像/JAR/dist)」节点(画布 build_image 类型)。
+func isBuildImageJob(jobType string) bool {
+	return strings.TrimSpace(jobType) == "build_image"
+}
+
+// NewStageExecutor 返回一个复用 Builder 容器基建的真实 dagrun.StageExecutor。
+// 仅对 script/custom 类型 job 做真实容器执行;其余类型打占位日志放行。
+// reportSink 可选(nil = 不持久化测试报告,但质量门禁阻断仍生效;Story 8-6 / FR-8-6)。
+func NewStageExecutor(b *Builder, reportSink TestReportSink) dagrun.StageExecutor {
+	return func(ctx context.Context, r *run.Run, stage pipeline.Stage, rep dagrun.StageReporter) error {
+		scriptJobs := make([]pipeline.Job, 0, len(stage.Jobs))
+		buildImageJobs := make([]pipeline.Job, 0, len(stage.Jobs))
+		deployJobs := make([]pipeline.Job, 0, len(stage.Jobs))
+		notifyJobs := make([]pipeline.Job, 0, len(stage.Jobs))
+		hasPushJob := false
+		for _, jb := range stage.Jobs {
+			switch {
+			case isScriptJob(jb.Type):
+				scriptJobs = append(scriptJobs, jb)
+			case isBuildImageJob(jb.Type):
+				buildImageJobs = append(buildImageJobs, jb)
+			case strings.TrimSpace(jb.Type) == "push_image":
+				hasPushJob = true
+			case isDeployJob(jb.Type):
+				deployJobs = append(deployJobs, jb)
+			case strings.TrimSpace(jb.Type) == "notify":
+				notifyJobs = append(notifyJobs, jb)
+			}
+		}
+
+		needsBuild := len(scriptJobs) > 0 || len(buildImageJobs) > 0
+		// 没有任何可执行节点(script/build_image/deploy_ssh/notify)且无 post → 诚实占位放行。
+		if !needsBuild && len(deployJobs) == 0 && len(notifyJobs) == 0 && len(stage.Post) == 0 {
+			for _, jb := range stage.Jobs {
+				_ = rep.JobRunning(ctx, jb.ID)
+				jr := rep.JobReporter(jb.ID)
+				if strings.TrimSpace(jb.Type) == "git_source" {
+					for _, line := range gitSourceLogLines(jb, r) {
+						_ = jr.Log(ctx, streamStdout, line)
+					}
+				} else {
+					if strings.TrimSpace(jb.Type) != "push_image" {
+						run.RecordExecution(jr, run.ExecutionStub)
+					}
+					_ = jr.Log(ctx, streamStdout, fmt.Sprintf("· %s(%s)— 真实执行未接入;本阶段放行", jb.Name, jb.Type))
+				}
+				_ = rep.JobDone(ctx, jb.ID, run.StepSuccess)
+			}
+			if len(stage.Jobs) == 0 {
+				_ = rep.Log(ctx, streamStdout, fmt.Sprintf("阶段「%s」无 job", stage.Name))
+			}
+			return nil
+		}
+
+		sink := &reporterSink{rep: rep}
+		hasPost := len(stage.Post) > 0
+		// 阶段内 job 级 DAG:多 job(且都带 ID)或任一 job 声明 needs → 按 job 级 DAG 并发调度
+		// (无依赖 job 并行,对齐画布「并行节点(无 needs)」语义;有 needs 的 job 等其全部上游成功后
+		// 再跑;各 job 独立克隆工作区以保并发安全)。单 job 阶段沿用既有路径(零额外克隆)。
+		// 要求都带 ID:DAG 需唯一节点 ID 建图(生产侧保存流水线时 job 必有 ID);无 ID(测试/异常数据)
+		// 退回既有类型分组路径以防建图失败。
+		// 注:无 needs 的同阶段 job 现按「并行」跑(各自独立工作区);若需「串行 + 共享 env/产物」,应给
+		// 下游 job 显式声明 needs(画布「串行节点」),与 UI 的串/并语义一致。
+		hasJobDAG := stageHasJobNeeds(stage.Jobs) || (len(stage.Jobs) > 1 && allJobsHaveIDs(stage.Jobs))
+
+		// 工作区:
+		//  - 非 DAG 路径:有 script/build_image **或** 有 post 步骤时克隆一份阶段工作区(沿用既有语义)。
+		//  - DAG 路径:job 各自克隆独立工作区,阶段级工作区仅 post 步骤(在其中跑)才需要。
+		// 纯部署/通知阶段无工作区。proj/settings 在 needsBuild||hasPost 时解析(两路径都可能用到)。
+		var (
+			proj      *project.Project
+			settings  *pipeline.Settings
+			workspace string
+			commitTag = "latest"
+		)
+		if needsBuild || hasPost {
+			p, s, perr := b.resolve(ctx, r)
+			if perr != nil {
+				_ = rep.Log(ctx, streamStderr, "无法加载项目构建配置:"+perr.Error())
+				return ErrBuildFailed
+			}
+			proj, settings = p, s
+		}
+		needStageWS := hasPost || (needsBuild && !hasJobDAG)
+		if needStageWS {
+			ws, mkErr := mkTempWorkspace()
+			if mkErr != nil {
+				_ = rep.Log(ctx, streamStderr, "创建临时工作区失败:"+mkErr.Error())
+				return ErrBuildFailed
+			}
+			workspace = ws
+			defer func() { _ = os.RemoveAll(workspace) }() // 宿主零污染
+
+			auth := b.revealGitAuth(proj.CredentialID)
+			resolved, cerr := b.cloner.Clone(ctx, proj.RepoURL, auth.Username, auth.Token, r.Trigger.Branch, r.Trigger.Commit, workspace)
+			auth = vault.GitAuth{}
+			if cerr != nil {
+				if errors.Is(ctx.Err(), context.Canceled) {
+					return run.ErrCanceled
+				}
+				_ = rep.Log(ctx, streamStderr, "源码克隆失败(鉴权/网络/ref 不存在或被 SSRF 拒绝)")
+				return ErrBuildFailed
+			}
+			if resolved != nil && resolved.CommitShort != "" {
+				commitTag = resolved.CommitShort
+				if b.recordCommit != nil {
+					b.recordCommit(ctx, r.ID, resolved.CommitShort)
+				}
+			}
+			// 跨阶段产物传递:把上游阶段已归档的 jar/dist 真字节恢复回本阶段新工作区的原相对路径,
+			// 使「构建/打包/部署」拆成独立串行阶段时,下游(如 build_image)仍能拿到上游产物。
+			// best-effort(首阶段无上游产物即 no-op;失败仅记日志,不阻断)。
+			b.restorePriorArtifacts(ctx, r, workspace, rep)
+		}
+
+		// 阶段主体(job 执行):捕获错误而非提前返回,以便其后无论成败都按条件跑 post 步骤。
+		jobErr := func() error {
+			// 旁挂服务(P1):阶段声明 services 时,起服务容器到临时网络,脚本容器加入同网按服务名互访;
+			// 阶段结束(成败/取消)拆除。驱动不支持容器网络能力 → 直接失败(不在缺依赖下假跑)。
+			// 两条执行路径(DAG / 类型分组)共用,故提到分支之前。
+			var svcNetwork string
+			if needsBuild && len(stage.Services) > 0 {
+				net, ok := b.startStageServices(ctx, r, stage, rep)
+				if !ok {
+					return ErrBuildFailed
+				}
+				svcNetwork = net
+				defer b.stopStageServices(context.WithoutCancel(ctx), r, stage, net, rep)
+			}
+
+			// ── 阶段内 job 级 DAG 路径:按 job 依赖并发调度,无依赖 job 并行、各自独立工作区 ──
+			if hasJobDAG {
+				return b.runStageJobsDAG(ctx, r, stage, rep, sink, proj, settings, svcNetwork, hasPushJob, reportSink)
+			}
+
+			// ── 既有路径(零行为变化):类型分组串行,共用单一阶段工作区 ──
+			if needsBuild {
+				// 步骤输出→下游变量(P1):同阶段 job 间经 $ATOMGO_ENV 文件传值,carriedEnv 累积注入后续 job。
+				var carriedEnv []pipeline.BuildVar
+				for _, jb := range scriptJobs {
+					if canceled(ctx) {
+						return run.ErrCanceled
+					}
+					_ = rep.JobRunning(ctx, jb.ID)
+					jrep := rep.JobReporter(jb.ID)
+					jsink := &reporterSink{rep: jrep}
+					step, verr := scriptStepFromJob(jb)
+					if verr != nil {
+						_ = jrep.Log(ctx, streamStderr, fmt.Sprintf("script job「%s」配置无效:%v", jb.Name, verr))
+						_ = rep.JobDone(ctx, jb.ID, run.StepFailed)
+						return ErrBuildFailed
+					}
+					// 注入顺序:运行参数 → 上游 job 输出(carriedEnv)→ 流水线级变量(「变量与缓存」,
+					// 含 secret,vault 即取即用)→ job 自身 env(后者覆盖同名)→ ATOMGO_ENV(系统,末位防覆盖)。
+					base := append(runParamsAsEnv(r.Trigger.Params), carriedEnv...)
+					if settings != nil && len(settings.Build.Vars) > 0 {
+						base = append(base, settings.Build.Vars...)
+					}
+					step.Env = append(base, step.Env...)
+					step.Env = append(step.Env, atomgoEnvVar())
+					// 旁挂服务网络:脚本容器加入,按服务名互访。
+					if svcNetwork != "" {
+						step.Resource.Network = svcNetwork
+					}
+					// 构建依赖缓存(#61):执行前恢复(暖构建)、成功后保存(best-effort,缓存问题绝不让构建失败)。
+					// 任务级 timeout/retry(#63):零值时 runScriptStepWithOpts 退化为单次无超时执行(旧行为)。
+					b.restoreJobCache(ctx, jrep, jb, r.Trigger.Branch, workspace, settings.Build.Cache)
+					if err := b.scriptEvidenceBuilder(jsink).runScriptStepWithOpts(ctx, jsink, 0, step, workspace); err != nil {
+						_ = rep.JobDone(ctx, jb.ID, run.StepFailed)
+						return err // ErrBuildFailed / run.ErrCanceled
+					}
+					b.saveJobCache(ctx, jrep, jb, r.Trigger.Branch, workspace, settings.Build.Cache)
+					// 捕获本 job 写入 $ATOMGO_ENV 的变量,供后续同阶段 job 引用。
+					carriedEnv = append(carriedEnv, captureStageEnv(ctx, jrep, workspace)...)
+					_ = rep.JobDone(ctx, jb.ID, run.StepSuccess)
+				}
+
+				for _, jb := range buildImageJobs {
+					if canceled(ctx) {
+						return run.ErrCanceled
+					}
+					_ = rep.JobRunning(ctx, jb.ID)
+					jrep := rep.JobReporter(jb.ID)
+					jsink := &reporterSink{rep: jrep}
+					if err := b.runBuildImageJob(ctx, jsink, jrep, jb, stage.Name, proj, settings, r.Trigger.ResolvedEnvironment, workspace, commitTag, hasPushJob); err != nil {
+						_ = rep.JobDone(ctx, jb.ID, run.StepFailed)
+						return err
+					}
+					_ = rep.JobDone(ctx, jb.ID, run.StepSuccess)
+				}
+
+				if err := b.collectScriptArtifacts(ctx, scriptJobs, workspace, slugify(proj.Name), stage.ID, stage.Name, rep); err != nil {
+					return err
+				}
+				if err := collectStageReport(ctx, reportSink, r, stage, workspace, rep); err != nil {
+					return err
+				}
+			}
+
+			// ── 部署节点(deploy_ssh):把本 run 已产出的产物经 SSH 部署到目标机(中途部署,不动 run 终态)──
+			for _, jb := range deployJobs {
+				if canceled(ctx) {
+					return run.ErrCanceled
+				}
+				_ = rep.JobRunning(ctx, jb.ID)
+				jrep := rep.JobReporter(jb.ID)
+				if err := b.runDeployJob(ctx, jrep, jb, r.ID, r.Trigger.Params); err != nil {
+					_ = rep.JobDone(ctx, jb.ID, run.StepFailed)
+					return err
+				}
+				_ = rep.JobDone(ctx, jb.ID, run.StepSuccess)
+			}
+
+			// ── 通知节点(notify):按节点配的渠道发通知(best-effort,不因通知失败而失败本阶段)──
+			for _, jb := range notifyJobs {
+				if canceled(ctx) {
+					return run.ErrCanceled
+				}
+				_ = rep.JobRunning(ctx, jb.ID)
+				b.runNotifyJob(ctx, rep.JobReporter(jb.ID), jb, r)
+				_ = rep.JobDone(ctx, jb.ID, run.StepSuccess)
+			}
+
+			// The grouped path otherwise silently omits unsupported jobs.
+			for _, jb := range stage.Jobs {
+				if !isScriptJob(jb.Type) && !isBuildImageJob(jb.Type) && !isDeployJob(jb.Type) &&
+					strings.TrimSpace(jb.Type) != "notify" && strings.TrimSpace(jb.Type) != "git_source" && strings.TrimSpace(jb.Type) != "push_image" {
+					run.RecordExecution(rep, run.ExecutionStub)
+				}
+			}
+			return nil
+		}()
+
+		// 阶段后置步骤(P1 · 对标 Jenkins post):无论 job 成败,按 condition 在同工作区跑清理/通知/归档
+		// (best-effort,post 失败只记日志、不改阶段结果)。用 WithoutCancel,使取消/失败后清理仍能跑。
+		if hasPost && workspace != "" {
+			b.runStagePost(context.WithoutCancel(ctx), sink, r, stage, workspace, jobErr != nil, rep)
+		}
+		return jobErr
+	}
+}
+
+// defaultJobDAGConcurrency 是「阶段内 job 级 DAG」的并发上限。阶段之间已可能并行,故 job 级再
+// 限一个较小上限,避免并发容器数无界放大拉爆宿主(0 = 由 dag 调度取节点数;这里给确定上限)。
+const defaultJobDAGConcurrency = 4
+
+// stageHasJobNeeds 报告阶段内是否有任一 job 声明了 job 级依赖(needs)。
+// 有 → 走 job 级 DAG 并发调度;无 → 走既有类型分组串行(向后兼容)。
+func stageHasJobNeeds(jobs []pipeline.Job) bool {
+	for _, jb := range jobs {
+		if len(jb.Needs) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// allJobsHaveIDs 报告阶段内每个 job 都有非空 ID。job 级 DAG 调度需唯一节点 ID 建图;生产侧保存
+// 流水线时 job 必有 ID,无 ID(仅测试/异常数据)时调用方退回既有类型分组路径以防 dag 建图失败。
+func allJobsHaveIDs(jobs []pipeline.Job) bool {
+	for _, jb := range jobs {
+		if strings.TrimSpace(jb.ID) == "" {
+			return false
+		}
+	}
+	return true
+}
+
+// runStageJobsDAG 按「阶段内 job 级 DAG」并发执行该阶段的所有 job:无依赖的 job 并行跑、有 needs
+// 的 job 等其全部上游成功后再跑(复用 dag.Graph.Schedule,与阶段级调度同一内核)。每个需工作区的
+// job(script/build_image)各自克隆一份独立临时工作区以保并发安全;env 沿 needs 边传递(上游 job
+// 写 $ATOMGO_ENV → 下游合并注入)。任一 job 有效失败/取消 → 阶段失败。
+//
+// 并发安全:工作区各 job 独立(Clone 本就被阶段级并行调用,已并发安全);日志经 sink 的运行级
+// mutex 串行化;jobEnvOut 用 mutex 保护;buildcache/产物按 job 隔离键写入。
+func (b *Builder) runStageJobsDAG(
+	ctx context.Context,
+	r *run.Run,
+	stage pipeline.Stage,
+	rep dagrun.StageReporter,
+	sink *reporterSink,
+	proj *project.Project,
+	settings *pipeline.Settings,
+	svcNetwork string,
+	hasPushJob bool,
+	reportSink TestReportSink,
+) error {
+	nodes := make([]dag.Node, 0, len(stage.Jobs))
+	jobByID := make(map[string]pipeline.Job, len(stage.Jobs))
+	for _, jb := range stage.Jobs {
+		nodes = append(nodes, dag.Node{ID: jb.ID, Needs: jb.Needs})
+		jobByID[jb.ID] = jb
+	}
+	g, gerr := dag.New(nodes)
+	if gerr != nil {
+		// 保存期已校验过;这里再失败属防御(数据异常)。
+		_ = rep.Log(ctx, streamStderr, "阶段内 job 依赖图非法:"+gerr.Error())
+		return ErrBuildFailed
+	}
+
+	var envMu sync.Mutex
+	jobEnvOut := make(map[string][]pipeline.BuildVar, len(stage.Jobs)) // jobID → 该 job 产出的 env(供下游合并)
+
+	runJob := func(ctx context.Context, id string) error {
+		if canceled(ctx) {
+			return run.ErrCanceled
+		}
+		jb := jobByID[id]
+		// 收集上游(needs)产出的 env,按 needs 声明序合并(后者覆盖同名,与既有 carriedEnv 语义一致)。
+		var upstreamEnv []pipeline.BuildVar
+		if len(jb.Needs) > 0 {
+			envMu.Lock()
+			for _, dep := range jb.Needs {
+				upstreamEnv = append(upstreamEnv, jobEnvOut[dep]...)
+			}
+			envMu.Unlock()
+		}
+
+		// 节点级 step:本 job 独占一个 step,日志/产物经 job 级 rep/sink 归到该节点 ordinal。
+		_ = rep.JobRunning(ctx, jb.ID)
+		jrep := rep.JobReporter(jb.ID)
+		jsink := &reporterSink{rep: jrep}
+
+		jobErr := func() error {
+			switch {
+			case isScriptJob(jb.Type):
+				out, err := b.runScriptJobIsolated(ctx, jsink, jrep, r, jb, stage, proj, settings, svcNetwork, upstreamEnv, reportSink)
+				if err != nil {
+					return err
+				}
+				if len(out) > 0 {
+					envMu.Lock()
+					jobEnvOut[id] = out
+					envMu.Unlock()
+				}
+				return nil
+			case isBuildImageJob(jb.Type):
+				return b.runBuildImageJobIsolated(ctx, jsink, jrep, r, jb, stage, proj, settings, hasPushJob)
+			case isDeployJob(jb.Type):
+				return b.runDeployJob(ctx, jrep, jb, r.ID, r.Trigger.Params)
+			case strings.TrimSpace(jb.Type) == "push_image":
+				// 推送随构建镜像节点完成(hasPushJob);本节点仅用于在 DAG 中编排顺序/展示。
+				_ = jrep.Log(ctx, streamStdout, fmt.Sprintf("· 推送镜像「%s」:已随构建镜像节点完成推送(本节点用于编排顺序)", jb.Name))
+				return nil
+			case strings.TrimSpace(jb.Type) == "notify":
+				b.runNotifyJob(ctx, jrep, jb, r)
+				return nil
+			default:
+				if strings.TrimSpace(jb.Type) != "git_source" {
+					run.RecordExecution(jrep, run.ExecutionStub)
+				}
+				_ = jrep.Log(ctx, streamStdout, fmt.Sprintf("· %s(%s)— 真实执行未接入;本节点放行", jb.Name, jb.Type))
+				return nil
+			}
+		}()
+
+		status := run.StepSuccess
+		if jobErr != nil {
+			status = run.StepFailed
+		}
+		_ = rep.JobDone(ctx, jb.ID, status)
+		return jobErr
+	}
+
+	res := g.Schedule(ctx, runJob, dag.Options{MaxConcurrency: defaultJobDAGConcurrency})
+
+	// 因上游失败/取消而从未执行的 job:显式标 skipped(其 runJob 未被调到,JobDone 未触发),
+	// 使其在运行详情里如实显示「跳过」而非被阶段失败兜底成 failed。
+	for _, jb := range stage.Jobs {
+		switch res[jb.ID].Status {
+		case dag.StatusSkipped, dag.StatusCanceled:
+			_ = rep.JobDone(ctx, jb.ID, run.StepSkipped)
+		}
+	}
+
+	if canceled(ctx) {
+		return run.ErrCanceled
+	}
+	// 汇总:任一 job 失败(取消优先识别)→ 阶段失败。skipped 仅因上游失败,已由该上游失败反映。
+	for _, jb := range stage.Jobs {
+		nr := res[jb.ID]
+		switch nr.Status {
+		case dag.StatusFailed:
+			if errors.Is(nr.Err, run.ErrCanceled) {
+				return run.ErrCanceled
+			}
+			return ErrBuildFailed
+		case dag.StatusCanceled:
+			return run.ErrCanceled
+		}
+	}
+	return nil
+}
+
+// cloneJobWorkspace 为单个 job 克隆一份独立的临时工作区(并发安全),并恢复本 run 已归档的上游产物。
+// 返回 (workspace, commitTag, cleanup, err);调用方务必在用完后调用 cleanup()。失败时已自行清理。
+func (b *Builder) cloneJobWorkspace(ctx context.Context, r *run.Run, proj *project.Project, rep dagrun.StageReporter) (string, string, func(), error) {
+	ws, mkErr := mkTempWorkspace()
+	if mkErr != nil {
+		_ = rep.Log(ctx, streamStderr, "创建临时工作区失败:"+mkErr.Error())
+		return "", "", func() {}, ErrBuildFailed
+	}
+	cleanup := func() { _ = os.RemoveAll(ws) }
+
+	auth := b.revealGitAuth(proj.CredentialID)
+	resolved, cerr := b.cloner.Clone(ctx, proj.RepoURL, auth.Username, auth.Token, r.Trigger.Branch, r.Trigger.Commit, ws)
+	auth = vault.GitAuth{}
+	if cerr != nil {
+		cleanup()
+		if errors.Is(ctx.Err(), context.Canceled) {
+			return "", "", func() {}, run.ErrCanceled
+		}
+		_ = rep.Log(ctx, streamStderr, "源码克隆失败(鉴权/网络/ref 不存在或被 SSRF 拒绝)")
+		return "", "", func() {}, ErrBuildFailed
+	}
+	commitTag := "latest"
+	if resolved != nil && resolved.CommitShort != "" {
+		commitTag = resolved.CommitShort
+		if b.recordCommit != nil {
+			b.recordCommit(ctx, r.ID, resolved.CommitShort) // 同一 commit;并发重复记录幂等无害
+		}
+	}
+	// 跨阶段 + 阶段内上游 job 产物:把本 run 已归档的 jar/dist 真字节恢复进本 job 工作区原相对路径。
+	b.restorePriorArtifacts(ctx, r, ws, rep)
+	return ws, commitTag, cleanup, nil
+}
+
+// runScriptJobIsolated 在独立工作区内执行单个 script 类 job(DAG 路径用)。返回该 job 写入
+// $ATOMGO_ENV 的变量(供下游 needs 合并)。env 注入序与既有串行路径一致:
+// 运行参数 → 上游 job 输出 → job 自身 env → ATOMGO_ENV。产物 + 测试报告逐 job 收集/门禁。
+func (b *Builder) runScriptJobIsolated(
+	ctx context.Context,
+	sink *reporterSink,
+	rep dagrun.StageReporter,
+	r *run.Run,
+	jb pipeline.Job,
+	stage pipeline.Stage,
+	proj *project.Project,
+	settings *pipeline.Settings,
+	svcNetwork string,
+	upstreamEnv []pipeline.BuildVar,
+	reportSink TestReportSink,
+) ([]pipeline.BuildVar, error) {
+	ws, _, cleanup, err := b.cloneJobWorkspace(ctx, r, proj, rep)
+	if err != nil {
+		return nil, err
+	}
+	defer cleanup()
+
+	step, verr := scriptStepFromJob(jb)
+	if verr != nil {
+		_ = rep.Log(ctx, streamStderr, fmt.Sprintf("script job「%s」配置无效:%v", jb.Name, verr))
+		return nil, ErrBuildFailed
+	}
+	// 注入顺序:运行参数 → 上游 job 输出 → 流水线级变量(「变量与缓存」,含 secret,vault 即取即用)
+	// → job 自身 env(后者覆盖同名)。此前流水线级变量只注入镜像构建路径、不到 script 步骤(漏),
+	// 导致脚本节点拿不到「变量与缓存」里配的 secret(如发版的 GITHUB_TOKEN)。本修复补齐。
+	base := append(runParamsAsEnv(r.Trigger.Params), upstreamEnv...)
+	if settings != nil && len(settings.Build.Vars) > 0 {
+		base = append(base, settings.Build.Vars...)
+	}
+	step.Env = append(base, step.Env...)
+	step.Env = append(step.Env, atomgoEnvVar())
+	if svcNetwork != "" {
+		step.Resource.Network = svcNetwork
+	}
+	b.restoreJobCache(ctx, rep, jb, r.Trigger.Branch, ws, settings.Build.Cache)
+	if err := b.scriptEvidenceBuilder(sink).runScriptStepWithOpts(ctx, sink, 0, step, ws); err != nil {
+		return nil, err // ErrBuildFailed / run.ErrCanceled
+	}
+	b.saveJobCache(ctx, rep, jb, r.Trigger.Branch, ws, settings.Build.Cache)
+	out := captureStageEnv(ctx, rep, ws)
+	if err := b.collectScriptArtifacts(ctx, []pipeline.Job{jb}, ws, slugify(proj.Name), stage.ID, stage.Name, rep); err != nil {
+		return out, err
+	}
+	if rerr := collectStageReport(ctx, reportSink, r, stage, ws, rep); rerr != nil {
+		return out, rerr // 质量门禁阻断
+	}
+	return out, nil
+}
+
+// runBuildImageJobIsolated 在独立工作区内执行单个 build_image job(DAG 路径用):先克隆 + 恢复上游
+// 产物(jar/dist),再复用既有 runBuildImageJob 真实构建/推送。
+func (b *Builder) runBuildImageJobIsolated(
+	ctx context.Context,
+	sink *reporterSink,
+	rep dagrun.StageReporter,
+	r *run.Run,
+	jb pipeline.Job,
+	stage pipeline.Stage,
+	proj *project.Project,
+	settings *pipeline.Settings,
+	hasPushJob bool,
+) error {
+	ws, commitTag, cleanup, err := b.cloneJobWorkspace(ctx, r, proj, rep)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+	return b.runBuildImageJob(ctx, sink, rep, jb, stage.Name, proj, settings, r.Trigger.ResolvedEnvironment, ws, commitTag, hasPushJob)
+}
+
+// runDeployJob 执行一个 deploy_ssh 节点:把本 run 已产出的产物经 SSH 部署到节点配置的目标机
+// (复用 deploy.Service.DeployForStage 中途部署,不动 run 终态)。任一目标失败 → 阶段失败、阻断下游。
+func (b *Builder) runDeployJob(ctx context.Context, rep dagrun.StageReporter, jb pipeline.Job, runID string, params map[string]string) error {
+	if b.deployer == nil {
+		run.RecordExecution(rep, run.ExecutionStub)
+		_ = rep.Log(ctx, streamStdout, "· 部署节点:部署服务未注入,跳过")
+		return nil
+	}
+	serverID := cfgString(jb.Config, "serverId")
+	if serverID == "" {
+		_ = rep.Log(ctx, streamStderr, fmt.Sprintf("部署节点「%s」未选目标服务器(serverId 空)", jb.Name))
+		return ErrBuildFailed
+	}
+	cfg := map[string]string{}
+	// deployPath / restartCommand 支持 {{param}} 占位:用本次运行参数渲染(命令型部署据此让
+	// 「本地端口 / 穿透端口」等随运行参数变化;非配置类部署不写占位 → renderTemplate 零开销直返)。
+	if dp := renderTemplate(cfgString(jb.Config, "deployPath"), params); dp != "" {
+		cfg["releaseBase"] = dp
+	}
+	if rc := renderTemplate(cfgString(jb.Config, "restartCommand"), params); rc != "" {
+		cfg["restartCommand"] = rc
+	}
+	// 镜像产物部署参数(#51)透传:deploy.DeployForStage 经这些键挑镜像产物并组装
+	// `docker run`(artifactType=image 选镜像;containerName/ports/runArgs 驱动容器名与端口/运行参数)。
+	// 各值原样搬运(deploy 层 array 化、绝不拼 shell,守 AC-SEC-02);空值不入 cfg 保持默认。
+	for _, k := range []string{"artifactType", "artifactSource", "containerName", "ports", "runArgs", "commandTimeoutSeconds", "connectTimeoutSeconds", "uploadIdleTimeoutSeconds", "uploadTimeoutSeconds"} {
+		if v := cfgString(jb.Config, k); v != "" {
+			cfg[k] = v
+		}
+	}
+	strategy := cfgString(jb.Config, "strategy")
+	stratLabel := strategy
+	if stratLabel == "" {
+		stratLabel = "rolling(默认)"
+	}
+	_ = rep.Log(ctx, streamStdout, fmt.Sprintf("→ SSH 部署本次产物到服务器 %s(策略 %s)…", serverID, stratLabel))
+	// 把目标机真实执行的命令 + stdout/stderr 实时回流到本部署步骤日志(脱敏由 sink 侧 Masker 兜底)。
+	dctx := deploy.WithCmdLog(ctx, func(stream, text string) { _ = rep.Log(ctx, stream, text) })
+	run.RecordExecution(rep, run.ExecutionReal)
+	results, err := b.deployer.DeployForStage(dctx, runID, []string{serverID}, cfg, strategy)
+	if err != nil {
+		_ = rep.Log(ctx, streamStderr, "部署失败:"+err.Error())
+		return ErrBuildFailed
+	}
+	failed := false
+	for _, dr := range results {
+		line := fmt.Sprintf("· %s:%s — %s", dr.ServerName, dr.Status, dr.Message)
+		if dr.Status == "success" {
+			_ = rep.Log(ctx, streamStdout, line)
+		} else {
+			_ = rep.Log(ctx, streamStderr, line)
+			failed = true
+		}
+	}
+	if failed {
+		return ErrBuildFailed
+	}
+	return nil
+}
+
+// runNotifyJob 执行一个 notify 节点:按节点配的渠道(id 或名称)发一条通知。
+// best-effort:通知失败只记日志、不令阶段失败(与终态通知钩子一致)。
+func (b *Builder) runNotifyJob(ctx context.Context, rep dagrun.StageReporter, jb pipeline.Job, r *run.Run) {
+	if b.notifier == nil {
+		run.RecordExecution(rep, run.ExecutionStub)
+		_ = rep.Log(ctx, streamStdout, "· 通知节点:通知服务未注入,跳过")
+		return
+	}
+	chRef := cfgString(jb.Config, "channel")
+	if chRef == "" {
+		run.RecordExecution(rep, run.ExecutionStub)
+		_ = rep.Log(ctx, streamStdout, "· 通知节点:未配渠道,跳过")
+		return
+	}
+	chID, chName := b.resolveChannel(ctx, chRef)
+	if chID == "" {
+		run.RecordExecution(rep, run.ExecutionStub)
+		_ = rep.Log(ctx, streamStderr, "通知节点:找不到渠道「"+chRef+"」,跳过")
+		return
+	}
+	commit := strings.TrimSpace(r.Trigger.Commit)
+	if len(commit) > 7 {
+		commit = commit[:7]
+	}
+	payload := notify.Payload{
+		Title:  "流水线通知",
+		Body:   fmt.Sprintf("流水线执行到通知节点:分支 %s,commit %s。", r.Trigger.Branch, commit),
+		Fields: map[string]string{"branch": r.Trigger.Branch, "commit": commit, "runId": r.ID, "stage": "notify"},
+	}
+	// 节点级内联模板(可选):配了标题/正文模板就按 {{占位}} 渲染覆盖默认文案,
+	// 占位语义与「通知」设置里的模板一致(project/branch/commit/status/runId 等)。
+	titleTpl := strings.TrimSpace(cfgString(jb.Config, "titleTemplate"))
+	bodyTpl := strings.TrimSpace(cfgString(jb.Config, "bodyTemplate"))
+	if titleTpl != "" || bodyTpl != "" {
+		vars := notify.TemplateVars{
+			Project: r.ProjectName,
+			Branch:  r.Trigger.Branch,
+			Commit:  commit,
+			Status:  r.Status,
+			Event:   "notify",
+			RunID:   r.ID,
+		}
+		if titleTpl != "" {
+			payload.Title = notify.RenderText(titleTpl, vars)
+		}
+		if bodyTpl != "" {
+			payload.Body = notify.RenderText(bodyTpl, vars)
+		}
+	}
+	attempted := false
+	nctx := notify.WithDeliveryObserver(ctx, func() {
+		attempted = true
+		run.RecordExecution(rep, run.ExecutionReal)
+	})
+	err := b.notifier.SendVia(nctx, chID, payload)
+	if !attempted {
+		run.RecordExecution(rep, run.ExecutionStub)
+	}
+	if err != nil {
+		_ = rep.Log(ctx, streamStderr, "通知发送失败(best-effort):"+err.Error())
+		return
+	}
+	_ = rep.Log(ctx, streamStdout, "· 已发通知 → 渠道「"+chName+"」")
+}
+
+// resolveChannel 把节点配的「渠道 id 或名称」解析为 (id, name);找不到返回空。
+func (b *Builder) resolveChannel(ctx context.Context, ref string) (id, name string) {
+	if ch, err := b.notifier.Get(ctx, ref); err == nil && ch != nil {
+		return ch.ID, ch.Name
+	}
+	chs, err := b.notifier.List(ctx)
+	if err != nil {
+		return "", ""
+	}
+	for _, ch := range chs {
+		if ch.Name == ref || ch.ID == ref {
+			return ch.ID, ch.Name
+		}
+	}
+	return "", ""
+}
+
+// runBuildImageJob 真实执行一个 build_image 节点:据节点 config 构造 BuildConfig,复用 Builder.build
+// (模型 A=docker build / 模型 B=工具链构建)在宿主驱动上真实构建,产出镜像/jar/dist 产物。
+// 镜像产物:环境绑定了 registry(或本阶段含 push_image 节点示意要推)→ b.push 推送并改写为远端引用 + digest;
+// 无 registry → 镜像留本地,emit 本地 tag。其它产物(jar/dist)直接 emit。失败映射 ErrBuildFailed / 取消。
+// 边界:docker build 上下文沿用工作区根(子目录上下文 = 后续);buildCommand 覆盖工具链默认命令 = 后续。
+func (b *Builder) runBuildImageJob(ctx context.Context, sink run.StepSink, rep dagrun.StageReporter, jb pipeline.Job, stageName string, proj *project.Project, settings *pipeline.Settings, envName, workspace, commitTag string, hasPushJob bool) error {
+	cfg := pipeline.BuildConfig{
+		Model:          cfgString(jb.Config, "buildModel"),
+		DockerfilePath: cfgString(jb.Config, "dockerfilePath"),
+		Context:        cfgString(jb.Config, "context"),
+		Toolchain:      pipeline.Toolchain{Language: cfgString(jb.Config, "toolchainLanguage"), Version: cfgString(jb.Config, "toolchainVersion")},
+		ArtifactType:   cfgString(jb.Config, "artifactType"),
+	}
+	if cfg.ArtifactType == "" {
+		cfg.ArtifactType = pipeline.ArtifactImage
+	}
+	if cfg.Model == "" {
+		cfg.Model = pipeline.BuildModelDockerfile
+	}
+	// 镜像名为项目级设置(settings.Build.ImageName),不由 build_image 节点 config 承载
+	// (与「registry 归环境、镜像名归项目」的单一真相源一致)。
+	cfg.ImageName = settings.Build.ImageName
+
+	localTag, art, berr := b.build(ctx, sink, 0, proj, cfg, workspace, commitTag)
+	if berr != nil {
+		if errors.Is(ctx.Err(), context.Canceled) {
+			return run.ErrCanceled
+		}
+		_ = rep.Log(ctx, streamStderr, fmt.Sprintf("构建节点「%s」失败:%v", jb.Name, berr))
+		return ErrBuildFailed
+	}
+	if art == nil {
+		return nil
+	}
+
+	// 镜像产物 + 绑定了 registry → 推送并登记远端引用(与非-dag Builder 同语义)。
+	if art.Type == run.ArtifactImage && localTag != "" {
+		registry, channelTag := b.resolveRegistry(settings, envName)
+		switch {
+		case registry != nil:
+			imageName := effectiveImageName(cfg, proj)
+			remoteTag, digest, perr := b.push(ctx, sink, 0, localTag, imageName, commitTag, channelTag, registry)
+			if perr != nil {
+				if errors.Is(ctx.Err(), context.Canceled) {
+					return run.ErrCanceled
+				}
+				_ = rep.Log(ctx, streamStderr, fmt.Sprintf("镜像推送失败:%v", perr))
+				return ErrBuildFailed
+			}
+			art.Reference = remoteTag
+			if digest != "" {
+				if art.Metadata == nil {
+					art.Metadata = map[string]any{}
+				}
+				art.Metadata["digest"] = digest
+			}
+		case hasPushJob:
+			_ = rep.Log(ctx, streamStdout, "配了 push_image 但环境未绑定镜像仓库(registry),镜像留本地;到「触发设置 → 环境」绑定仓库后即自动推送")
+		}
+	}
+
+	// 记来源节点(阶段 + job 名),供运行详情标注「哪个节点产的」。
+	if art.Metadata == nil {
+		art.Metadata = map[string]any{}
+	}
+	art.Metadata["sourceStage"] = stageName
+	art.Metadata["sourceJob"] = jb.Name
+
+	if err := rep.EmitArtifact(ctx, *art); err != nil {
+		_ = rep.Log(ctx, streamStderr, "登记产物失败:"+err.Error())
+	}
+	return nil
+}
+
+// collectScriptArtifacts 收集 script job 声明的文件产物(job.Config["artifactPath"],**多行、每行一条**):
+// 逐条定位工作区内路径 → 按类型(目录=dist、*.jar=jar、其它文件=archive)归档进制品库真字节 →
+// EmitArtifact 登记。一个 job 可声明多条(既出 jar 又出 dist 等);未声明则跳过。
+// 镜像类产物不走这里(走 build_image 节点);文件类才在此收集。
+func (b *Builder) collectScriptArtifacts(ctx context.Context, jobs []pipeline.Job, workspace, slug, stageID, stageName string, rep dagrun.StageReporter) error {
+	onLine := func(stream, line string) { _ = rep.Log(ctx, stream, line) }
+	seenPaths := map[string]bool{}
+	seenNames := map[string]bool{}
+	for _, jb := range jobs {
+		declarations, explicit, err := artifactDeclarations(jb.Config)
+		if err != nil {
+			onLine(streamStderr, "产物声明无效:"+err.Error())
+			return ErrBuildFailed
+		}
+		if !explicit {
+			for _, rel := range splitCommands(renderTemplate(cfgString(jb.Config, "artifactPath"), templateContext(jb.Config))) {
+				declarations = append(declarations, artifactDeclaration{Path: rel})
+			}
+		}
+		for declarationIndex, declaration := range declarations {
+			rel := renderTemplate(declaration.Path, templateContext(jb.Config))
+			if rel == "" {
+				onLine(streamStderr, "产物路径为空")
+				if explicit {
+					return ErrBuildFailed
+				}
+				continue
+			}
+			// 通配(如 backend/target/*.jar)→ 展开为实际文件逐个收集;否则按原路径收集。
+			var matches []string
+			if strings.ContainsAny(rel, "*?[") {
+				clean := filepath.Clean(rel)
+				if filepath.IsAbs(clean) || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
+					onLine(streamStderr, "产物路径越界,已拒绝:"+rel)
+					if explicit {
+						return ErrBuildFailed
+					}
+					continue
+				}
+				matches, err = filepath.Glob(filepath.Join(workspace, clean))
+				if err != nil {
+					onLine(streamStderr, "产物通配无效:"+rel)
+					if explicit {
+						return ErrBuildFailed
+					}
+					continue
+				}
+				if len(matches) == 0 {
+					onLine(streamStderr, "产物通配未匹配,跳过:"+rel)
+					if explicit {
+						return ErrBuildFailed
+					}
+					continue
+				}
+			} else {
+				matches = []string{filepath.Join(workspace, rel)}
+			}
+			for _, match := range matches {
+				matchedRel, rerr := filepath.Rel(workspace, match)
+				if rerr != nil {
+					onLine(streamStderr, "产物路径越界,已拒绝:"+rel)
+					if explicit {
+						return ErrBuildFailed
+					}
+					continue
+				}
+				name := declaration.Name
+				if name != "" && len(matches) > 1 {
+					name += " / " + filepath.Base(match)
+				}
+				if explicit {
+					identity := filepath.Clean(matchedRel)
+					if seenPaths[identity] || (name != "" && seenNames[name]) {
+						onLine(streamStderr, "产物声明重复或名称冲突:"+identity)
+						return ErrBuildFailed
+					}
+					seenPaths[identity] = true
+					if name != "" {
+						seenNames[name] = true
+					}
+				}
+				if err := b.collectOneFileArtifact(ctx, workspace, matchedRel, slug, jb.ID, jb.Name, stageID, stageName, declarationIndex, name, explicit, rep, onLine); err != nil {
+					onLine(streamStderr, "产物收集失败:"+err.Error())
+					if explicit {
+						return ErrBuildFailed
+					}
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// collectOneFileArtifact 收集单条文件产物路径:越界(.. / 绝对)拒绝;定位不到打日志跳过(不致命);
+// 类型按路径自动判(目录=dist、*.jar=jar、其它文件=archive)。产物 metadata 记来源节点(阶段 + job 名),
+// 供运行详情标注「哪个节点产的」。制品库未注入时 emit 占位引用,向后兼容。
+func (b *Builder) collectOneFileArtifact(ctx context.Context, workspace, rel, slug, jobID, jobName, stageID, stageName string, declarationIndex int, name string, strict bool, rep dagrun.StageReporter, onLine func(stream, line string)) error {
+	clean := filepath.Clean(rel)
+	if filepath.IsAbs(clean) || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
+		return fmt.Errorf("产物路径越界:%s", rel)
+	}
+	full := filepath.Join(workspace, clean)
+	workspaceReal, err := filepath.EvalSymlinks(workspace)
+	if err != nil {
+		return err
+	}
+	fullReal, err := filepath.EvalSymlinks(full)
+	if err != nil {
+		return err
+	}
+	realRel, err := filepath.Rel(workspaceReal, fullReal)
+	if err != nil || realRel == ".." || strings.HasPrefix(realRel, ".."+string(filepath.Separator)) {
+		return fmt.Errorf("产物符号链接越界:%s", rel)
+	}
+	fi, err := os.Stat(full)
+	if err != nil {
+		return err
+	}
+	// 产物名带上路径基名,避免一个 job 多产物同名(如多个 dist 目录)难以区分。
+	base := filepath.Base(full)
+	// metadata 记来源节点:sourceStage/sourceJob 供 UI 标注「哪个节点产的」(storeXxx 只补 stored/format,不清这些)。
+	// workspacePath 记原始工作区相对路径,供跨阶段产物传递:下游阶段据此把本产物真字节恢复回原位
+	// (如 backend/target/x.jar),使被拆到下游阶段的 build_image「COPY target/x.jar」仍能命中。
+	if name == "" {
+		name = slug + "-" + base
+	}
+	art := &run.Artifact{Name: name, Reference: base, Metadata: map[string]any{"sourceStage": stageName, "sourceStageId": stageID, "sourceJob": jobName, "sourceJobId": jobID, "declarationIndex": declarationIndex, "workspacePath": clean}}
+	stored := false
+	switch {
+	case fi.IsDir():
+		art.Type = run.ArtifactDist
+		art.SizeBytes = dirSize(full)
+		stored = b.storeDistDir(art, full, onLine)
+	case strings.HasSuffix(strings.ToLower(full), ".jar"):
+		art.Type = run.ArtifactJar
+		art.SizeBytes = fileSize(full)
+		stored = b.storeJarBytes(art, full, onLine)
+	default:
+		art.Type = run.ArtifactArchive
+		art.SizeBytes = fileSize(full)
+		stored = b.storeJarBytes(art, full, onLine) // 单文件原样字节归档(format=file)
+	}
+	if strict && b.artStore != nil && !stored {
+		return errors.New("显式声明的产物未能归档到制品库")
+	}
+	if err := rep.EmitArtifact(ctx, *art); err != nil {
+		return err
+	}
+	onLine(streamStdout, "已产出产物:"+art.Name+"("+art.Type+","+rel+")")
+	return nil
+}
+
+// scriptStepFromJob 从画布 job.Config 构造一条 script 步骤(image + 多行 commands + 可选 workDir)。
+// image 缺失或 commands 全空 → 错误(诚实失败,不静默跳过)。
+func scriptStepFromJob(jb pipeline.Job) (pipeline.PipelineStep, error) {
+	ctx := templateContext(jb.Config)
+	image := renderTemplate(cfgString(jb.Config, "image"), ctx)
+	if image == "" {
+		return pipeline.PipelineStep{}, errors.New("缺少运行镜像(image)")
+	}
+	// 自定义节点(templated):有 commandTemplate 则渲染 {{参数}} 作命令;否则用原始 commands。
+	rawCmds := cfgString(jb.Config, "commands")
+	if tpl := cfgString(jb.Config, "commandTemplate"); tpl != "" {
+		rawCmds = renderTemplate(tpl, ctx)
+	}
+	cmds := splitCommands(rawCmds)
+	if len(cmds) == 0 {
+		return pipeline.PipelineStep{}, errors.New("缺少执行命令(commands / commandTemplate)")
+	}
+	return pipeline.PipelineStep{
+		ID:       jb.ID,
+		Name:     jb.Name,
+		Type:     pipeline.StepTypeScript,
+		Image:    image,
+		Commands: cmds,
+		Env:      matrixEnvVars(jb.Config), // 矩阵 cell 注入的 axis 环境变量(MATRIX_<AXIS>),空时 nil
+		WorkDir:  renderTemplate(cfgString(jb.Config, "workDir"), ctx),
+		// 任务级 timeout/retry/资源规格(P0 引擎能力):从 job.Config 自由 KV 读取(非负;非法/缺失→零值=旧行为)。
+		TimeoutSeconds: cfgNonNegInt(jb.Config, "timeoutSeconds"),
+		Retries:        cfgNonNegInt(jb.Config, "retries"),
+		Resource: pipeline.Resource{
+			CPU:    cfgString(jb.Config, "cpu"),
+			Memory: cfgString(jb.Config, "memory"),
+		},
+	}, nil
+}
+
+// cfgNonNegInt 从自由 KV config 取非负整数(支持 JSON number 与字符串两种存法;
+// 缺失/非法/负数 → 0,即「不限/不重试」的旧行为,向后兼容)。
+func cfgNonNegInt(cfg map[string]any, key string) int {
+	if cfg == nil {
+		return 0
+	}
+	switch v := cfg[key].(type) {
+	case float64: // encoding/json 把数字反序列化为 float64
+		if v > 0 {
+			return int(v)
+		}
+	case int:
+		if v > 0 {
+			return v
+		}
+	case string:
+		if n, err := strconv.Atoi(strings.TrimSpace(v)); err == nil && n > 0 {
+			return n
+		}
+	}
+	return 0
+}
+
+// matrixEnvVars 读取矩阵展开(dagrun.ExpandMatrix)注入 job.Config 的 cell 环境变量,转为非 secret
+// BuildVar(`MATRIX_<AXIS>=<值>`,容器内命令可 `$MATRIX_GO` 引用)。键 "__matrixEnv" 由调度层合成、
+// 非用户配置;值通常是 map[string]string(内存构造),JSON 回环时为 map[string]any,两者皆容错。
+// 普通(非矩阵)job 无此键 → 返回 nil(零行为变化)。
+func matrixEnvVars(cfg map[string]any) []pipeline.BuildVar {
+	if cfg == nil {
+		return nil
+	}
+	raw, ok := cfg["__matrixEnv"]
+	if !ok {
+		return nil
+	}
+	collect := func(k, v string) pipeline.BuildVar {
+		return pipeline.BuildVar{Key: k, Value: v, Secret: false}
+	}
+	switch m := raw.(type) {
+	case map[string]string:
+		out := make([]pipeline.BuildVar, 0, len(m))
+		for k, v := range m {
+			out = append(out, collect(k, v))
+		}
+		return out
+	case map[string]any:
+		out := make([]pipeline.BuildVar, 0, len(m))
+		for k, v := range m {
+			if s, ok := v.(string); ok {
+				out = append(out, collect(k, s))
+			}
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
+// runParamsAsEnv 把运行参数(明文 K=V)转为非 secret BuildVar(注入容器环境)。键序确定性不保证(map),
+// 但同名键不会重复(map 天然去重)。
+func runParamsAsEnv(params map[string]string) []pipeline.BuildVar {
+	if len(params) == 0 {
+		return nil
+	}
+	out := make([]pipeline.BuildVar, 0, len(params))
+	for k, v := range params {
+		out = append(out, pipeline.BuildVar{Key: k, Value: v, Secret: false})
+	}
+	return out
+}
+
+// cfgString 从自由 KV config 取字符串值(非字符串/缺失 → "")。
+func cfgString(cfg map[string]any, key string) string {
+	if cfg == nil {
+		return ""
+	}
+	if v, ok := cfg[key].(string); ok {
+		return strings.TrimSpace(v)
+	}
+	return ""
+}
+
+// gitSourceLogLines 为 git_source 节点拼出可读的源码信息(仓库 / 分支 / 提交 / 凭据)。
+// 注:git_source 是 go-git 库克隆(非 shell 命令),真实检出发生在构建阶段各 job 工作区,
+// 此处展示「本阶段引用的源」让步骤日志不再是空占位。绝不回显凭据值,只标注是否已绑定。
+func gitSourceLogLines(jb pipeline.Job, r *run.Run) []string {
+	repo := cfgString(jb.Config, "repoUrl")
+	branch := cfgString(jb.Config, "branch")
+	if branch == "" {
+		branch = strings.TrimSpace(r.Trigger.Branch)
+	}
+	if branch == "" {
+		branch = "(默认分支)"
+	}
+	commit := strings.TrimSpace(r.Trigger.Commit)
+	lines := []string{}
+	if repo != "" {
+		lines = append(lines, "· 源码仓库:"+repo)
+	}
+	branchLine := "· 分支:" + branch
+	if commit != "" {
+		if len(commit) > 12 {
+			commit = commit[:12]
+		}
+		branchLine += "   · 提交:" + commit
+	} else {
+		branchLine += "   · 提交:构建阶段克隆时解析 HEAD"
+	}
+	lines = append(lines, branchLine)
+	if cfgString(jb.Config, "credentialId") != "" {
+		lines = append(lines, "· 凭据:已绑定(经保险库,绝不回显)")
+	}
+	lines = append(lines, "· 实际克隆在构建阶段各 job 工作区执行(go-git 浅克隆)")
+	if len(lines) == 0 {
+		lines = append(lines, fmt.Sprintf("· %s(git_source)", jb.Name))
+	}
+	return lines
+}
+
+// splitCommands 把多行命令字符串拆成逐行命令(trim 尾随 CR、剔空行)。
+func splitCommands(s string) []string {
+	if strings.TrimSpace(s) == "" {
+		return nil
+	}
+	out := make([]string, 0, 4)
+	for _, line := range strings.Split(s, "\n") {
+		line = strings.TrimRight(line, "\r")
+		if strings.TrimSpace(line) != "" {
+			out = append(out, line)
+		}
+	}
+	return out
+}
+
+// reporterSink 把 runScriptStep 期望的 run.StepSink 适配到 dagrun.StageReporter:
+// Log/EmitArtifact 转发到已绑定本阶段序号的 reporter,其余步骤生命周期方法为 no-op
+// (阶段的 StepRunning/StepDone 由 dagrun.Runner 负责)。
+type reporterSink struct {
+	rep dagrun.StageReporter
+}
+
+func (s *reporterSink) RecordExecution(mode string) { run.RecordExecution(s.rep, mode) }
+
+func (s *reporterSink) Plan(context.Context, []run.StepDecl) error          { return nil }
+func (s *reporterSink) StepRunning(context.Context, int) error              { return nil }
+func (s *reporterSink) StepDone(context.Context, int, string) error         { return nil }
+func (s *reporterSink) SetFailureLog(context.Context, string) error         { return nil }
+func (s *reporterSink) SetSpecSource(context.Context, run.SpecSource) error { return nil }
+func (s *reporterSink) Log(ctx context.Context, stream string, _ int, line string) error {
+	return s.rep.Log(ctx, stream, line)
+}
+func (s *reporterSink) EmitArtifact(ctx context.Context, a run.Artifact) error {
+	return s.rep.EmitArtifact(ctx, a)
+}

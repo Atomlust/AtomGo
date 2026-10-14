@@ -1,0 +1,89 @@
+# AtomGo 自托管 —— docker compose 一键起。
+#
+#   1. cp .env.example .env  并按注释填好(至少生成 ATOMGO_MASTER_KEY)
+#   2. docker compose up -d
+#   3. 打开 http://localhost:7088,用 admin / 你设的口令登录
+#
+# 数据(sqlite 库 / 构建产物 / 仓库缓存)持久化在具名卷 atomgo-data(挂到容器 /data,
+# 镜像已将 /data 设为 nonroot 属主与工作目录)。master key 务必持久保存:换 key 旧凭据无法解密。
+services:
+  atomgo:
+    image: ghcr.io/atomlust/atomgo:${ATOMGO_VERSION:-latest}
+    container_name: atomgo
+    restart: unless-stopped
+    ports:
+      - "${ATOMGO_PORT:-7088}:7088"
+    environment:
+      # 容器内监听地址(默认 7088);与上方端口映射保持一致。
+      ATOMGO_ADDR: ":7088"
+      # 初始管理员口令(首启建账;之后改这里不改库)。务必改掉。
+      ATOMGO_ADMIN_PASSWORD: ${ATOMGO_ADMIN_PASSWORD:?请在 .env 设置 ATOMGO_ADMIN_PASSWORD}
+      # 凭据保险库主密钥(base64 的 32 字节)。空则保险库进未配置态、加密凭据功能不可用。
+      ATOMGO_MASTER_KEY: ${ATOMGO_MASTER_KEY:-}
+      # 反代后部署时填外部访问 URL(用于 webhook 回调 / OAuth 回跳)。
+      ATOMGO_PUBLIC_URL: ${ATOMGO_PUBLIC_URL:-}
+      # 默认 sqlite,库落 /data/atomgo.db(WORKDIR=/data)。切 MySQL 见下方 env + 注释。
+      ATOMGO_DB_DRIVER: ${ATOMGO_DB_DRIVER:-sqlite}
+      ATOMGO_DB_DSN: ${ATOMGO_DB_DSN:-}
+      # 运行执行器:默认 DAG(真按 UI 可视化流水线 stages 执行)。仅需回退旧版固定流程时
+      # 显式设 ATOMGO_RUNNER=legacy(clone→对仓库根 docker build→deploy,不跑可视化流水线)。
+      ATOMGO_RUNNER: ${ATOMGO_RUNNER:-}
+    volumes:
+      - atomgo-data:/data
+      # 隔离构建 / 镜像部署需要 Docker:取消下一行挂宿主 docker.sock(注意:等同授予宿主 root 级权限,
+      # 仅在信任的自托管环境开启)。注意 distroless 镜像不含 docker CLI;需要容器内跑 docker 构建时,
+      # 建议改用 install.sh 把二进制装在带 Docker 的宿主上,而非在本容器内构建。
+      # - /var/run/docker.sock:/var/run/docker.sock
+    healthcheck:
+      # 静态镜像无 curl/wget;用二进制自身做 TCP 探活的最小手段:复用 --version(进程可执行即健康)。
+      test: ["CMD", "/atomgo", "--version"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+  # 可选:MySQL 8。启用方式:
+  #   docker compose --profile mysql up -d
+  # 并在 .env 设 ATOMGO_DB_DRIVER=mysql、
+  #   ATOMGO_DB_DSN=atomgo:atomgo@tcp(mysql:3306)/atomgo?parseTime=true&charset=utf8mb4
+  mysql:
+    image: mysql:8.0
+    profiles: ["mysql"]
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: atomgo
+      MYSQL_USER: atomgo
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-atomgo}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpw}
+    volumes:
+      - atomgo-mysql:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # 可选:PostgreSQL 16。启用方式:
+  #   docker compose --profile postgres up -d
+  # 并在 .env 设 ATOMGO_DB_DRIVER=postgres、
+  #   ATOMGO_DB_DSN=postgres://atomgo:atomgo@postgres:5432/atomgo?sslmode=disable
+  postgres:
+    image: postgres:16-alpine
+    profiles: ["postgres"]
+    restart: unless-stopped
+    environment:
+      POSTGRES_DATABASE: atomgo
+      POSTGRES_USER: atomgo
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-atomgo}
+    volumes:
+      - atomgo-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "atomgo"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  atomgo-data:
+  atomgo-mysql:
+  atomgo-postgres:

@@ -1,0 +1,105 @@
+package httpapi
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/atomlust/atomgo/internal/auth"
+	"github.com/atomlust/atomgo/internal/project"
+	"github.com/atomlust/atomgo/internal/repocache"
+	"github.com/atomlust/atomgo/internal/vault"
+)
+
+type fakeRefsLister struct {
+	refs    *repocache.Refs
+	commits []repocache.Commit
+	err     error
+}
+
+func (f fakeRefsLister) ListRefs(_ context.Context, _, _, _ string) (*repocache.Refs, error) {
+	return f.refs, f.err
+}
+
+func (f fakeRefsLister) ListCommits(_ context.Context, _, _, _, _ string, _ int) ([]repocache.Commit, error) {
+	return f.commits, f.err
+}
+
+func setupRefsServer(t *testing.T, lister RefsLister) (string, *http.Client, string, string) {
+	t.Helper()
+	st := testStoreAuth(t)
+	svc := auth.NewService(st.DB, nil)
+	if err := svc.Bootstrap("admin", "testpass"); err != nil {
+		t.Fatalf("bootstrap: %v", err)
+	}
+	v := vault.New(st.DB, testMasterKey())
+	psvc := project.New(st.DB, v, stubProber{branch: "main"})
+	projID := seedSourceProject(t, st.DB, "https://example.com/p.git")
+
+	srv := httptest.NewServer(New(testWebFSAuth(), svc, WithVault(v), WithProjects(psvc), WithRefs(lister)))
+	t.Cleanup(srv.Close)
+	client := newTestClient(t)
+	csrf := loginWithClient(t, client, srv.URL)
+	return srv.URL, client, csrf, projID
+}
+
+func TestListRefsEndpointReturnsBranchesAndTags(t *testing.T) {
+	lister := fakeRefsLister{refs: &repocache.Refs{
+		Branches: []repocache.Ref{{Name: "main", Commit: "aaa111"}, {Name: "dev", Commit: "bbb222"}},
+		Tags:     []repocache.Ref{{Name: "v1.0", Commit: "ccc333", IsTag: true}},
+	}}
+	srv, client, _, projID := setupRefsServer(t, lister)
+
+	resp, err := client.Get(srv + "/api/projects/" + projID + "/refs")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	var body refsResponse
+	_ = json.NewDecoder(resp.Body).Decode(&body)
+	if len(body.Branches) != 2 || body.Branches[0].Name != "main" || body.Branches[0].Commit != "aaa111" {
+		t.Fatalf("branches 不对: %+v", body.Branches)
+	}
+	if len(body.Tags) != 1 || body.Tags[0].Name != "v1.0" {
+		t.Fatalf("tags 不对: %+v", body.Tags)
+	}
+}
+
+func TestListCommitsEndpoint(t *testing.T) {
+	lister := fakeRefsLister{commits: []repocache.Commit{
+		{SHA: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Short: "aaaaaaa", Subject: "feat: x", Author: "me"},
+	}}
+	srv, client, _, projID := setupRefsServer(t, lister)
+	resp, err := client.Get(srv + "/api/projects/" + projID + "/commits?ref=main&limit=10")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	var body struct {
+		Commits []commitDTO `json:"commits"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&body)
+	if len(body.Commits) != 1 || body.Commits[0].Short != "aaaaaaa" || body.Commits[0].Subject != "feat: x" {
+		t.Fatalf("commits 不对: %+v", body.Commits)
+	}
+}
+
+func TestListRefsEndpointDisabledWhenNoLister(t *testing.T) {
+	srv, client, _, projID := setupRefsServer(t, nil)
+	resp, err := client.Get(srv + "/api/projects/" + projID + "/refs")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("代码管理区未启用应 503,实际 %d", resp.StatusCode)
+	}
+}

@@ -1,0 +1,61 @@
+# Go
+/atomgo
+/atomgo-*
+*.test
+*.out
+# GoReleaser 发版产物(本地 snapshot / release 的输出目录),不入库
+/dist/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Frontend
+/web/node_modules/
+# 注:/web/dist 为 go:embed 所需,保留占位 index.html;真实产物(带 hash 的 assets / favicon 等)
+# 由 vite build 生成,不入库(避免每次构建 churn)。仅保留 index.html 占位。
+/web/dist/*
+!/web/dist/index.html
+# Playwright e2e 产物(报告/trace/截图)— 不入库
+/web/test-results/
+/web/playwright-report/
+/web/.playwright/
+# Playwright 头显浏览器桥 / 手动操控 scratch(browser-use 调试用,不入库)
+/web/headed-demo.mjs
+/web/pw-*.mjs
+# 一次性演示/原型 scratch — 不入库
+/demos/
+
+# docker-compose 本地密钥(含 master key / 口令),不入库;仅 .env.example 入库
+.env
+
+# Claude Code 本地设置(机器特定权限/覆盖,不入库)
+.claude/settings.local.json
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# sky-aitest（自动注入：工作区/凭证/运行时配置不入库）
+# 注:这些规则全部锚定根目录(前导 /),避免裸目录名误伤源码(如 auth/ 曾误吞 internal/auth)。
+.sky-aitest/
+/auth/
+.mcp.json
+/seed.spec.ts
+/runs/
+/results/
+/test-results/
+
+# 内部 AI 开发过程产物(BMad / Claude 工具链)—— 不进公开仓库,仅本地开发用
+/_bmad/
+/_bmad-output/
+/.claude/
+/CLAUDE.md
+
+# WorkBuddy 项目数据(记忆/上下文/缓存,不入库)
+.workbuddy/
+docs/multi-node-proxy.md
+docs/upstream-merge-conflicts.md
+specs

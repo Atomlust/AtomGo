@@ -1,0 +1,76 @@
+export default {
+  // ─── トップバー / パンくず ─────────────────────────────────────
+  breadcrumbAria: 'パンくずナビゲーション',
+  breadcrumbProjects: 'プロジェクト',
+  title: 'パイプライン設定',
+
+  // ─── タブ ───────────────────────────────────────────────────────
+  tabCanvas: 'パイプラインキャンバス',
+  tabVars: '変数とキャッシュ',
+  tabTriggers: 'トリガー設定',
+  tabEnvs: '環境と認証情報',
+  tabStripAria: 'パイプライン設定タブ',
+
+  // ─── パイプライン・アズ・コード(GitOps · FR-8-12)──────────────
+  pacTitle: 'パイプライン・アズ・コード',
+  pacOnHint: '実行は実行ブランチのリポジトリ .atomgo.yml を読み込んで駆動します(ファイルがない/不正な場合はこの設定にフォールバック)。',
+  pacOffHint: '有効にすると、各実行は実行ブランチのリポジトリルートの .atomgo.yml を読み込んで駆動します(ない/不正な場合はこの設定にフォールバック)。',
+  pacToggleFailed: '切り替えに失敗しました。再試行してください。',
+
+  // ─── PR ステータスチェック(コミットステータス書き戻し · Story 8-9 / FR-8-9)─
+  prStatusTitle: 'PR ステータスチェック',
+  prStatusOnHint: '実行終了時にプロジェクトのリポジトリから GitHub/Gitee を識別し、プロジェクトの認証情報でそのコミットの成功/失敗ステータスを PR チェックとして書き戻します(ベストエフォート。失敗しても実行には影響しません)。',
+  prStatusOffHint: '有効にすると、実行終了時にリポジトリから GitHub/Gitee を識別し、プロジェクトの認証情報でコミットステータスを PR チェックとして書き戻します(ベストエフォート)。',
+  prStatusToggleFailed: '切り替えに失敗しました。再試行してください。',
+
+  // ─── リポジトリ設定のプレビュー(GitOps · ref を指定して .atomgo.yml を取得・検証)──
+  pacPreviewBtn: 'リポジトリ設定をプレビュー',
+  pacPreviewTitle: 'リポジトリ設定のプレビュー',
+  pacPreviewSub: 'ブランチ/タグ/コミットを指定してリポジトリのファイルを取得・検証します:',
+  pacPreviewCloseAria: 'プレビューを閉じる',
+  pacPreviewCloseBtn: '閉じる',
+  pacPreviewRefLabel: 'ブランチ / タグ / コミット',
+  pacPreviewFetch: '取得して検証',
+  pacPreviewNotFound: '{ref} に .atomgo.yml が見つかりません。実行時はここで設定したパイプラインにフォールバックします。',
+  pacPreviewInvalid: '{ref} の .atomgo.yml は検証に失敗しました。実行時はここで設定したパイプラインに静かにフォールバックします:',
+  pacPreviewValid: '{ref} の .atomgo.yml は検証に成功しました(ステージ数 {count})。実行時はこれが使用されます。',
+  pacPreviewJobCount: 'ジョブ {count} 件',
+  pacPreviewConnFailed: '接続に失敗しました。ネットワークを確認して再試行してください。',
+  pacPreviewFailed: 'プレビューに失敗しました({status})。再試行してください。',
+  pacPreviewFailedRetry: 'プレビューに失敗しました。再試行してください。',
+
+  // ─── ツールバーボタン ───────────────────────────────────────────
+  aiGenerate: 'AI でパイプライン生成',
+  importYaml: 'YAML からインポート',
+  templates: 'テンプレート',
+  validate: '設定を検証',
+  closeValidationPanel: '検証パネルを閉じる',
+  badgeReady: '準備完了',
+  badgeErrors: '{n} 件のエラー',
+  saving: '保存中…',
+  saveSettings: '設定を保存',
+
+  // ─── バナー / ステータス ────────────────────────────────────────
+  dismiss: '閉じる',
+  settingsSaved: '設定を保存しました',
+  retry: '再試行',
+  loading: '読み込み中',
+
+  // ─── 読み込みエラー ─────────────────────────────────────────────
+  errNoServer: 'サーバーに接続できません。バックエンドが稼働しているか確認して再試行してください。',
+  errProjectNotFound: 'プロジェクトが存在しません。プロジェクト ID が正しいか確認してください。',
+  errLoadFailedStatus: 'パイプラインの読み込みに失敗しました（{status}）',
+  errLoadFailedRetry: 'パイプラインの読み込みに失敗しました。しばらくしてから再試行してください。',
+
+  // ─── 保存エラー ─────────────────────────────────────────────────
+  errSaveFailedRetry: '保存に失敗しました。しばらくしてから再試行してください。',
+  errSaveFailedStatus: '保存に失敗しました（{status}）',
+  errInvalidStage: 'ステージ名は空にできず、kind は許可された値である必要があります。確認して再試行してください。',
+  errInvalidJob: 'ジョブ名または種類は空にできません。入力して再試行してください。',
+  errDuplicateId: 'ステージまたはジョブの ID が重複しています。重複を削除して再試行してください。',
+  errInvalidBuild: 'ビルドモデルは dockerfile/toolchain、成果物の種類は image/jar/dist である必要があります。',
+  errInvalidVar: '変数キーは空にできず、同一スコープ内で重複できません。secret 変数にはボールトの認証情報を選択する必要があります。',
+  errInvalidEnvironment: '環境名は空にできず、イメージレジストリの種類は harbor/acr/dockerhub/custom である必要があります。',
+  errCredentialNotFound: '参照されているボールトの認証情報が存在しません。選び直して再試行してください。',
+  errVaultUnconfigured: 'ボールトに master key が設定されていないため、secret 認証情報を参照できません。',
+}

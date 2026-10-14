@@ -1,0 +1,518 @@
+/**
+ * AtomGo shared dialog / modal / form / panel styles.
+ *
+ * Canonical source for modal dialogs, form fields and list panels, reused across
+ * settings pages (credential vault, user management, …). Mirrors the visual
+ * language of SettingsVault.vue so every “弹层” looks identical, while staying
+ * app-wide reusable. Classes here are intentionally global (no <style scoped>),
+ * the consuming view only needs page-specific overrides.
+ */
+
+/* ─── section header (title + descriptive subtitle + optional action) ──────── */
+.section-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+.section-head-text {
+  flex: 1;
+}
+.section-title {
+  font-size: 1.12rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--color-text);
+}
+.section-desc {
+  font-size: 0.82rem;
+  color: var(--color-faint);
+  margin-top: 4px;
+  max-width: 68ch;
+  line-height: 1.55;
+}
+
+/* ─── panel (card wrapping a list) ─────────────────────────────────────────── */
+.panel {
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--rounded-card);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  animation: panel-in 0.45s var(--ease-out-expo) both;
+}
+.panel--loading {
+  pointer-events: none;
+}
+@keyframes panel-in {
+  from { opacity: 0; transform: translateY(13px); }
+  to   { opacity: 1; transform: none; }
+}
+.panel-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 13px 18px;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+.panel-meta {
+  margin-left: auto;
+  font-size: 0.74rem;
+  color: var(--color-faint);
+  font-weight: 400;
+}
+
+/* ─── banner (inline error / warning / info) ───────────────────────────────── */
+.banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 11px 14px;
+  border-radius: var(--rounded);
+  font-size: 0.83rem;
+  line-height: 1.5;
+}
+.banner > svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.banner--error {
+  background: var(--color-red-soft);
+  border: 1px solid var(--color-red-line);
+  color: var(--color-red);
+}
+.banner--warn {
+  background: oklch(83% 0.13 82 / 0.12);
+  border: 1px solid var(--color-amber-line);
+  color: var(--color-amber);
+}
+.banner--info {
+  background: var(--color-primary-soft);
+  border: 1px solid var(--color-primary);
+  color: var(--color-primary);
+}
+.banner-retry {
+  margin-left: auto;
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: inherit;
+  font-size: 0.83rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.banner-retry:hover {
+  opacity: 0.8;
+}
+
+/* ─── buttons (modal + standalone) ─────────────────────────────────────────── */
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 15px;
+  border: none;
+  background: var(--color-primary);
+  color: #fff;
+  font-family: var(--font-sans);
+  font-size: 0.83rem;
+  font-weight: 600;
+  border-radius: var(--rounded);
+  cursor: pointer;
+  box-shadow: 0 5px 16px var(--color-primary-soft);
+  transition:
+    background-color var(--duration-fast),
+    transform var(--duration-fast),
+    box-shadow var(--duration-fast);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.btn-primary:hover:not(:disabled) {
+  background: var(--color-primary-press);
+  transform: translateY(-1px);
+}
+.btn-primary:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 3px;
+}
+.btn-primary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  height: 34px;
+  padding: 0 15px;
+  background: var(--color-card-2);
+  color: var(--color-text);
+  border: 1px solid var(--color-border-strong);
+  font-family: var(--font-sans);
+  font-size: 0.83rem;
+  font-weight: 500;
+  border-radius: var(--rounded);
+  cursor: pointer;
+  transition:
+    border-color var(--duration-fast),
+    background-color var(--duration-fast);
+}
+.btn-secondary:hover:not(:disabled) {
+  border-color: var(--color-faint);
+}
+.btn-secondary:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+.btn-secondary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn-danger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 15px;
+  background: var(--color-red-soft);
+  color: var(--color-red);
+  border: 1px solid var(--color-red-line);
+  font-family: var(--font-sans);
+  font-size: 0.83rem;
+  font-weight: 600;
+  border-radius: var(--rounded);
+  cursor: pointer;
+  transition:
+    background-color var(--duration-fast),
+    transform var(--duration-fast);
+}
+.btn-danger:hover:not(:disabled) {
+  background: oklch(62% 0.18 22 / 0.25);
+  transform: translateY(-1px);
+}
+.btn-danger:focus-visible {
+  outline: 2px solid var(--color-red);
+  outline-offset: 2px;
+}
+.btn-danger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* ─── modal ───────────────────────────────────────────────────────────────── */
+.modal-scrim {
+  position: fixed;
+  inset: 0;
+  background: oklch(0% 0 0 / 0.62);
+  display: grid;
+  place-items: center;
+  z-index: 100;
+  padding: 24px;
+  animation: scrim-in var(--duration-fast) ease both;
+}
+@keyframes scrim-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.modal {
+  width: 100%;
+  max-width: 520px;
+  background: var(--color-card);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--rounded-xl);
+  box-shadow: var(--shadow-modal);
+  overflow: hidden;
+  animation: modal-in 0.35s var(--ease-out-expo) both;
+}
+.modal--sm {
+  max-width: 420px;
+}
+@keyframes modal-in {
+  from { opacity: 0; transform: translateY(14px) scale(0.98); }
+  to   { opacity: 1; transform: none; }
+}
+.modal-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 20px 20px 16px;
+  border-bottom: 1px solid var(--color-border);
+}
+.modal-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--rounded-lg);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+.modal-icon--danger {
+  background: var(--color-red-soft);
+  color: var(--color-red);
+}
+.modal-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-text);
+  margin-top: 2px;
+  letter-spacing: -0.01em;
+}
+.modal-sub {
+  font-size: 0.78rem;
+  color: var(--color-faint);
+  margin-top: 3px;
+  line-height: 1.4;
+}
+.modal-close {
+  margin-left: auto;
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--rounded-md);
+  border: none;
+  background: transparent;
+  color: var(--color-faint);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: color var(--duration-fast), background-color var(--duration-fast);
+}
+.modal-close:hover {
+  color: var(--color-text);
+  background: var(--color-inset);
+}
+.modal-close:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+.modal-close:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.modal-banner {
+  margin: 16px 20px 0;
+  border-radius: var(--rounded);
+}
+.modal-form {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.modal-body {
+  padding: 20px;
+}
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 4px;
+}
+/* Footer as a direct child of .modal (no padded wrapper). */
+.modal-footer--standalone {
+  padding: 4px 20px 20px;
+}
+
+/* ─── form fields ─────────────────────────────────────────────────────────── */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.field-label {
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--color-dim);
+}
+.field-optional {
+  font-weight: 400;
+  color: var(--color-faint);
+}
+.field-input {
+  width: 100%;
+  height: 38px;
+  background: var(--color-inset);
+  border: 1px solid var(--color-border);
+  border-radius: var(--rounded);
+  padding: 0 12px;
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: 0.86rem;
+  transition:
+    border-color var(--duration-fast),
+    box-shadow var(--duration-fast);
+}
+.field-input::placeholder {
+  color: var(--color-faint);
+}
+.field-input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-soft);
+}
+.field-input--error {
+  border-color: var(--color-red);
+}
+.field-input--error:focus {
+  border-color: var(--color-red);
+  box-shadow: 0 0 0 3px var(--color-red-soft);
+}
+.field-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.field-error {
+  font-size: 0.76rem;
+  color: var(--color-red);
+  line-height: 1.4;
+}
+.field-hint {
+  font-size: 0.74rem;
+  color: var(--color-faint);
+  line-height: 1.4;
+}
+
+/* ─── segmented control (role / type selector) ────────────────────────────── */
+.segmented {
+  display: inline-flex;
+  background: var(--color-inset);
+  border-radius: var(--rounded);
+  padding: 3px;
+  gap: 2px;
+  width: 100%;
+}
+.seg-item {
+  flex: 1;
+  height: 30px;
+  border: none;
+  background: transparent;
+  color: var(--color-dim);
+  font-family: var(--font-sans);
+  font-size: 0.8rem;
+  font-weight: 500;
+  border-radius: var(--rounded-md);
+  cursor: pointer;
+  transition:
+    color var(--duration-fast),
+    background-color var(--duration-fast),
+    box-shadow var(--duration-fast);
+}
+.seg-item:hover:not(:disabled) {
+  color: var(--color-text);
+  background: oklch(100% 0 0 / 0.04);
+}
+.seg-item--active {
+  background: var(--color-card);
+  color: var(--color-text);
+  box-shadow: var(--shadow);
+}
+.seg-item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ─── skeleton (list loading) ─────────────────────────────────────────────── */
+.skel-row {
+  display: grid;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--color-border);
+}
+.skel-row:last-child {
+  border-bottom: none;
+}
+.skel {
+  display: block;
+  background: linear-gradient(
+    90deg,
+    var(--color-inset) 0%,
+    oklch(100% 0 0 / 0.06) 50%,
+    var(--color-inset) 100%
+  );
+  background-size: 200% 100%;
+  border-radius: var(--rounded-md);
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+@keyframes shimmer {
+  0%   { background-position: 200% center; }
+  100% { background-position: -200% center; }
+}
+.skel--avatar { width: 32px; height: 32px; border-radius: var(--rounded); }
+.skel--name   { height: 14px; width: 60%; }
+.skel--role   { height: 28px; width: 120px; border-radius: var(--rounded); }
+.skel--ops     { height: 14px; width: 64px; }
+
+/* ─── empty state ─────────────────────────────────────────────────────────── */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 48px 32px;
+  text-align: center;
+}
+.empty-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: var(--rounded-xl);
+  background: var(--color-inset);
+  border: 1.5px dashed var(--color-border-strong);
+  display: grid;
+  place-items: center;
+  color: var(--color-dim);
+  margin-bottom: 4px;
+}
+.empty-label {
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+.empty-hint {
+  font-size: 0.8rem;
+  color: var(--color-faint);
+  max-width: 42ch;
+  line-height: 1.55;
+}
+
+/* ─── spinner ─────────────────────────────────────────────────────────────── */
+.spinner {
+  display: inline-block;
+  width: 13px;
+  height: 13px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  border-radius: var(--rounded-full);
+  animation: spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+.spinner--red {
+  border-color: oklch(69% 0.17 22 / 0.3);
+  border-top-color: var(--color-red);
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ─── reduced motion ──────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
