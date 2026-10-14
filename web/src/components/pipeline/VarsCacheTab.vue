@@ -322,7 +322,8 @@ function maskFor(row: VarRow): string {
   flex-direction: column;
   gap: 18px;
   align-items: stretch;
-  max-width: 980px;
+  /* 铺满 tab 面板可用宽度(不再自限 980px);变量行的 1fr 值列会随之展开。 */
+  width: 100%;
 }
 
 .card {
@@ -383,7 +384,8 @@ function maskFor(row: VarRow): string {
 /* ─── Variable table ─────────────────────────────────────────────────────── */
 .vhd, .vrow {
   display: grid;
-  grid-template-columns: 180px 1fr 128px 34px;
+  /* 键列可随宽度适度伸展(180→240px),值列 1fr 吃掉剩余空间,铺满整行。 */
+  grid-template-columns: minmax(180px, 240px) 1fr 128px 34px;
   gap: 10px;
   align-items: center;
   padding: 9px 18px;

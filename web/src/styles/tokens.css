@@ -140,11 +140,15 @@
   --space-5:          20px;
   --space-6:          24px;
   --rail-width:       62px;
-  --main-pad:         48px;
+  /* 左右留白:自适应视口(窄屏 16px → 宽屏 32px),取代原先固定的 48px,
+     让内容在任意宽度下都更贴边、铺得更满。 */
+  --main-pad:         clamp(16px, 2.2vw, 32px);
   --main-pad-top:     26px;
   --main-pad-bottom:  90px;
   --card-gap:         18px;
-  --content-max:      1680px;
+  /* 内容区不再设上限(100% = 铺满 .main-area),由 --main-pad 单独控制留白;
+     原先 1680px 的上限会在宽屏上产生大片居中空白。 */
+  --content-max:      100%;
 
   /* ——— Duration / easing ——— */
   --duration-fast:    150ms;

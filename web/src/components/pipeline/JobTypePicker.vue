@@ -175,7 +175,7 @@ watch(
   place-items: center;
   padding: 24px;
 }
-.jtp-guide { padding: 12px; margin: 0 0 16px; border-left: 3px solid var(--color-primary); background: var(--color-primary-soft); color: var(--color-text); font-size: 13px; line-height: 1.6; }
+.jtp-guide { padding: 12px; margin: 0 0 16px; border-left: 3px solid var(--color-primary); background: var(--color-primary-soft); color: var(--color-text); font-size: 0.867rem; line-height: 1.6; }
 .type-card--guide { outline: 2px solid var(--color-primary); outline-offset: 2px; }
 
 .jtp-dialog {
@@ -245,8 +245,16 @@ watch(
 
 .jtp-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(232px, 1fr));
-  gap: 10px;
+  /* 一行固定 2 列。原先 auto-fill + minmax(232px,1fr) 在 840px 弹层里会排成 3 列,
+     卡片仅约 258px,内容拥挤;改 2 列后卡片约 390px,舒展很多。 */
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+/* 极窄屏(弹层宽度不足)回落单列,避免强行 2 列再次把卡片挤窄。 */
+@media (max-width: 560px) {
+  .jtp-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .type-card {

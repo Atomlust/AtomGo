@@ -597,7 +597,7 @@ function goLogin(): void {
   background: var(--sp-bg);
   color: var(--sp-text);
   font-family: var(--font-sans);
-  font-size: 14px;
+  font-size: 0.933rem;
   line-height: 1.5;
 }
 
@@ -697,14 +697,14 @@ function goLogin(): void {
   display: grid;
   place-items: center;
   border-radius: 10px;
-  font-size: 20px;
+  font-size: 1.333rem;
   color: var(--sp-text);
   background: linear-gradient(160deg, var(--sp-blue), var(--sp-deep));
   box-shadow: 0 6px 18px rgba(37, 99, 235, 0.45);
 }
 .brand-name {
   font-weight: 700;
-  font-size: 18px;
+  font-size: 1.2rem;
   letter-spacing: 0.2px;
 }
 
@@ -719,7 +719,9 @@ function goLogin(): void {
 }
 .card {
   position: relative;
-  width: min(520px, 100%);
+  /* 内容宽度 520px → 720px(+200px):原先卡片偏窄,表单与说明文字挤在一起。
+     仍以 100% 兜底,窄屏不会溢出。 */
+  width: min(720px, 100%);
   padding: 34px 34px 30px;
   border-radius: 22px;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.03));
@@ -749,7 +751,7 @@ function goLogin(): void {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  font-size: 12px;
+  font-size: 0.8rem;
   letter-spacing: 1.4px;
   text-transform: uppercase;
   color: var(--sp-cyan);
@@ -763,7 +765,7 @@ function goLogin(): void {
 }
 .headline {
   margin: 12px 0 6px;
-  font-size: 28px;
+  font-size: 1.867rem;
   font-weight: 760;
   letter-spacing: -0.4px;
   line-height: 1.15;
@@ -771,7 +773,7 @@ function goLogin(): void {
 .lede {
   margin: 0 0 18px;
   color: var(--sp-dim);
-  font-size: 14px;
+  font-size: 0.933rem;
 }
 
 /* ——— banner ——— */
@@ -785,11 +787,11 @@ function goLogin(): void {
   background: rgba(248, 113, 113, 0.12);
   border: 1px solid rgba(248, 113, 113, 0.35);
   color: #ffd9d9;
-  font-size: 13px;
+  font-size: 0.867rem;
 }
 .banner__icon {
   flex: none;
-  font-size: 15px;
+  font-size: 1rem;
 }
 .banner--info {
   background: rgba(56, 189, 248, 0.12);
@@ -815,7 +817,7 @@ function goLogin(): void {
 }
 .section__legend {
   padding: 0 8px;
-  font-size: 12.5px;
+  font-size: 0.833rem;
   font-weight: 600;
   letter-spacing: 0.3px;
   color: var(--sp-sky);
@@ -826,17 +828,17 @@ function goLogin(): void {
   gap: 6px;
 }
 .field__label {
-  font-size: 12.5px;
+  font-size: 0.833rem;
   color: var(--sp-dim);
 }
 .field__hint {
   margin: 0;
-  font-size: 12px;
+  font-size: 0.8rem;
   color: var(--sp-faint);
   line-height: 1.45;
 }
 .field__error {
-  font-size: 12px;
+  font-size: 0.8rem;
   color: #ffb4b4;
 }
 .grid-2 {
@@ -867,7 +869,7 @@ function goLogin(): void {
   outline: none;
   background: transparent;
   color: var(--sp-text);
-  font-size: 14px;
+  font-size: 0.933rem;
   padding: 11px 0;
 }
 .field__input::placeholder {
@@ -904,20 +906,20 @@ function goLogin(): void {
   height: 16px;
 }
 .radio__title {
-  font-size: 13.5px;
+  font-size: 0.9rem;
   font-weight: 600;
   color: var(--sp-text);
 }
 .radio__desc {
   grid-column: 2;
-  font-size: 12px;
+  font-size: 0.8rem;
   color: var(--sp-faint);
   line-height: 1.4;
 }
 
 .step-hint {
   margin: 2px 0 0;
-  font-size: 12px;
+  font-size: 0.8rem;
   color: var(--sp-faint);
 }
 
@@ -932,7 +934,7 @@ function goLogin(): void {
   padding: 13px 18px;
   border: none;
   border-radius: 13px;
-  font-size: 15px;
+  font-size: 1rem;
   font-weight: 650;
   color: #fff;
   cursor: pointer;
@@ -988,14 +990,14 @@ function goLogin(): void {
   background: rgba(34, 211, 238, 0.08);
 }
 .keybox__title {
-  font-size: 13px;
+  font-size: 0.867rem;
   font-weight: 650;
   color: var(--sp-cyan);
   margin-bottom: 4px;
 }
 .keybox__hint {
   margin: 0 0 10px;
-  font-size: 12px;
+  font-size: 0.8rem;
   color: var(--sp-dim);
   line-height: 1.45;
 }
@@ -1006,7 +1008,7 @@ function goLogin(): void {
 }
 .keybox__value {
   flex: 1;
-  font-size: 11.5px;
+  font-size: 0.767rem;
   word-break: break-all;
   padding: 9px 10px;
   border-radius: 9px;
@@ -1021,7 +1023,7 @@ function goLogin(): void {
   border-radius: 9px;
   background: rgba(255, 255, 255, 0.06);
   color: var(--sp-text);
-  font-size: 13px;
+  font-size: 0.867rem;
   cursor: pointer;
   transition: background 0.15s;
 }
@@ -1039,7 +1041,7 @@ function goLogin(): void {
   display: flex;
   justify-content: center;
   gap: 10px;
-  font-size: 12px;
+  font-size: 0.8rem;
   color: var(--sp-faint);
   pointer-events: none;
 }

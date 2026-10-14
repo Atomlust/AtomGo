@@ -750,9 +750,10 @@ onMounted(() => {
 
 <style scoped>
 .library {
-  max-width: 1120px;
-  margin: 0 auto;
-  padding: clamp(1.5rem, 1rem + 2vw, 3rem) clamp(1rem, 0.5rem + 2vw, 2.5rem);
+  /* 与其余页面(Projects / Runs / Environments 等)完全一致:根容器不自带任何
+     padding、不设 max-width、不居中 —— 宽度与纵向留白统一由外层 .main-inner
+     (--content-max + --main-pad / --main-pad-top)提供。此前本页额外的纵向
+     padding 使其顶部留白明显多于其他页面,已移除。 */
 }
 
 .page-header {
@@ -763,7 +764,7 @@ onMounted(() => {
   margin-bottom: 1.5rem;
 }
 .page-title {
-  font-size: clamp(1.5rem, 1.2rem + 1.4vw, 2.1rem);
+  font-size: var(--text-display);
   font-weight: 680;
   letter-spacing: -0.02em;
   margin: 0;
@@ -772,7 +773,7 @@ onMounted(() => {
 .page-sub {
   margin: 0.35rem 0 0;
   color: var(--color-dim);
-  font-size: 0.92rem;
+  font-size: var(--text-body);
 }
 
 /* Segmented control — intentional active state with sliding underline feel */
@@ -793,7 +794,7 @@ onMounted(() => {
   border: none;
   background: transparent;
   color: var(--color-dim);
-  font-size: 0.9rem;
+  font-size: var(--text-body);
   font-weight: 560;
   border-radius: 9px;
   cursor: pointer;
@@ -813,7 +814,7 @@ onMounted(() => {
   min-width: 1.4rem;
   height: 1.4rem;
   padding: 0 0.4rem;
-  font-size: 0.72rem;
+  font-size: var(--text-caps);
   font-weight: 640;
   color: var(--color-faint);
   background: var(--color-border);
@@ -868,7 +869,7 @@ onMounted(() => {
 .vg-name,
 .cn-name {
   margin: 0;
-  font-size: 1.05rem;
+  font-size: var(--text-h1);
   font-weight: 640;
   letter-spacing: -0.01em;
   color: var(--color-text);
@@ -880,7 +881,7 @@ onMounted(() => {
 .vg-count-pill,
 .cn-type-pill {
   flex-shrink: 0;
-  font-size: 0.72rem;
+  font-size: var(--text-caps);
   font-weight: 600;
   padding: 0.18rem 0.55rem;
   border-radius: 999px;
@@ -891,7 +892,7 @@ onMounted(() => {
 .vg-desc,
 .cn-desc {
   margin: 0;
-  font-size: 0.86rem;
+  font-size: var(--text-body);
   color: var(--color-dim);
   line-height: 1.45;
   min-height: 1.2em;
@@ -911,7 +912,7 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 0.6rem;
-  font-size: 0.82rem;
+  font-size: var(--text-label);
   min-width: 0;
 }
 .cn-cfg-key {
@@ -941,7 +942,7 @@ onMounted(() => {
   padding-top: 0.4rem;
 }
 .cn-time {
-  font-size: 0.76rem;
+  font-size: var(--text-caps);
   color: var(--color-faint);
 }
 .cn-card-actions {
@@ -957,12 +958,12 @@ onMounted(() => {
   gap: 0.6rem;
 }
 .cn-type-hint {
-  font-size: 0.78rem;
+  font-size: var(--text-label);
   color: var(--color-faint);
 }
 .cn-rows-empty {
   margin: 0;
-  font-size: 0.82rem;
+  font-size: var(--text-label);
   color: var(--color-faint);
   font-style: italic;
 }
@@ -980,7 +981,7 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 0.6rem;
-  font-size: 0.82rem;
+  font-size: var(--text-label);
 }
 .vg-var-key {
   font-family: var(--font-mono, ui-monospace, monospace);
@@ -998,7 +999,7 @@ onMounted(() => {
 .vg-var-secret {
   color: var(--color-amber);
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 0.78rem;
+  font-size: var(--text-label);
 }
 .vg-var--more {
   color: var(--color-faint);
@@ -1015,7 +1016,7 @@ onMounted(() => {
   padding-top: 0.4rem;
 }
 .tpl-time {
-  font-size: 0.76rem;
+  font-size: var(--text-caps);
   color: var(--color-faint);
 }
 
@@ -1027,7 +1028,7 @@ onMounted(() => {
   border: none;
   border-radius: 10px;
   font-weight: 600;
-  font-size: 0.9rem;
+  font-size: var(--text-body);
   cursor: pointer;
   transition: background var(--duration-fast, 150ms), transform var(--duration-fast, 150ms);
 }
@@ -1042,20 +1043,20 @@ onMounted(() => {
   border: 1px solid var(--color-border-strong);
   border-radius: 10px;
   font-weight: 560;
-  font-size: 0.9rem;
+  font-size: var(--text-body);
   cursor: pointer;
   transition: border-color var(--duration-fast, 150ms), background var(--duration-fast, 150ms);
 }
 .btn-secondary:hover:not(:disabled) { border-color: var(--color-primary); }
 .btn-secondary:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
 .btn-secondary:disabled { opacity: 0.55; cursor: not-allowed; }
-.btn-sm { padding: 0.4rem 0.85rem; font-size: 0.84rem; }
+.btn-sm { padding: 0.4rem 0.85rem; font-size: var(--text-label); }
 
 .link-danger {
   border: none;
   background: none;
   color: var(--color-red);
-  font-size: 0.82rem;
+  font-size: var(--text-label);
   font-weight: 560;
   cursor: pointer;
   padding: 0.2rem 0.3rem;
@@ -1068,7 +1069,7 @@ onMounted(() => {
   border: none;
   background: none;
   color: var(--color-primary);
-  font-size: 0.82rem;
+  font-size: var(--text-label);
   font-weight: 580;
   cursor: pointer;
 }
@@ -1082,7 +1083,7 @@ onMounted(() => {
   gap: 1rem;
   padding: 0.75rem 1rem;
   border-radius: 10px;
-  font-size: 0.88rem;
+  font-size: var(--text-body);
   margin-bottom: 1rem;
 }
 .banner--error {
@@ -1112,8 +1113,8 @@ onMounted(() => {
   color: var(--color-faint);
   opacity: 0.6;
 }
-.empty-label { margin: 0.3rem 0 0; font-size: 1.1rem; font-weight: 600; color: var(--color-text); }
-.empty-hint { margin: 0; max-width: 30rem; color: var(--color-dim); font-size: 0.88rem; line-height: 1.55; }
+.empty-label { margin: 0.3rem 0 0; font-size: var(--text-h1); font-weight: 600; color: var(--color-text); }
+.empty-hint { margin: 0; max-width: 30rem; color: var(--color-dim); font-size: var(--text-body); line-height: 1.55; }
 .empty-state .btn-primary { margin-top: 0.8rem; }
 
 /* Skeleton */
@@ -1160,12 +1161,12 @@ onMounted(() => {
   justify-content: space-between;
   margin-bottom: 1rem;
 }
-.modal-title { margin: 0; font-size: 1.2rem; font-weight: 640; color: var(--color-text); }
+.modal-title { margin: 0; font-size: var(--text-h1); font-weight: 640; color: var(--color-text); }
 .modal-close {
   border: none;
   background: none;
   color: var(--color-dim);
-  font-size: 1rem;
+  font-size: var(--text-body);
   cursor: pointer;
   width: 2rem;
   height: 2rem;
@@ -1182,7 +1183,7 @@ onMounted(() => {
 /* Fields */
 .field { margin-bottom: 1rem; }
 .field-label-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.4rem; }
-.field-label { display: block; margin-bottom: 0.4rem; font-size: 0.84rem; font-weight: 560; color: var(--color-dim); }
+.field-label { display: block; margin-bottom: 0.4rem; font-size: var(--text-label); font-weight: 560; color: var(--color-dim); }
 .input {
   width: 100%;
   padding: 0.55rem 0.75rem;
@@ -1190,7 +1191,7 @@ onMounted(() => {
   border: 1px solid var(--color-border);
   border-radius: 9px;
   color: var(--color-text);
-  font-size: 0.9rem;
+  font-size: var(--text-body);
   transition: border-color var(--duration-fast, 150ms);
 }
 .input:focus { outline: none; border-color: var(--color-primary); }
@@ -1208,7 +1209,7 @@ onMounted(() => {
   background: var(--color-inset);
   border-radius: 9px;
   cursor: pointer;
-  font-size: 0.95rem;
+  font-size: var(--text-body);
 }
 .var-secret-toggle--on { border-color: var(--color-amber-line); background: var(--color-amber-soft); }
 .var-remove {

@@ -15,7 +15,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { NIcon } from 'naive-ui'
-import { Lock, LockOpen, AlertTriangle, Refresh, Server, ExternalLink, ListCheck } from '@vicons/tabler'
+import { Lock, LockOpen, AlertTriangle, Refresh, Server, ExternalLink } from '@vicons/tabler'
 import {
   getProxyOverview,
   refreshProxyRoute,
@@ -204,10 +204,6 @@ function expiryText(d: DerivedRow): string {
   <div class="ovw">
     <header class="ovw__header">
       <div class="ovw__title-wrap">
-        <span class="ovw__eyebrow">
-          <NIcon :size="13"><ListCheck /></NIcon>
-          {{ t('proxyOverview.eyebrow') }}
-        </span>
         <h1 class="ovw__title">{{ t('proxyOverview.title') }}</h1>
         <p class="ovw__sub">{{ t('proxyOverview.subtitle') }}</p>
       </div>
@@ -409,9 +405,11 @@ function expiryText(d: DerivedRow): string {
 
 <style scoped>
 .ovw {
-  padding: 28px clamp(16px, 4vw, 40px) 40px;
-  max-width: 1180px;
-  margin: 0 auto;
+  /* 与其余页面一致:根容器不自带横向 padding / max-width / margin auto,
+     宽度与留白统一由外层 .main-inner(--content-max + --main-pad)提供。
+     原先本页额外加了 clamp(16px,4vw,40px) 横向 padding(与 .main-inner 叠加成
+     双重内缩 → 偏窄)与 28px 顶部 padding(→ 顶部留白多于其他页面),均已移除。 */
+  padding: 0 0 40px;
 }
 
 /* 头部 */
@@ -423,18 +421,8 @@ function expiryText(d: DerivedRow): string {
   flex-wrap: wrap;
   margin-bottom: 22px;
 }
-.ovw__eyebrow {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: var(--text-micro);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.09em;
-  color: var(--color-primary);
-}
 .ovw__title {
-  margin: 6px 0 4px;
+  margin: 0 0 4px;
   font-size: var(--text-display);
   font-weight: 700;
   letter-spacing: -0.01em;

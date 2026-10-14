@@ -51,9 +51,9 @@ type TabKey = 'canvas' | 'vars' | 'triggers' | 'envs'
 
 const TABS = computed<Array<{ key: TabKey; label: string }>>(() => [
   { key: 'canvas',   label: t('projectPipeline.tabCanvas') },
+  { key: 'envs',     label: t('projectPipeline.tabEnvs') },
   { key: 'vars',     label: t('projectPipeline.tabVars') },
   { key: 'triggers', label: t('projectPipeline.tabTriggers') },
-  { key: 'envs',     label: t('projectPipeline.tabEnvs') },
 ])
 
 const activeTab = computed<TabKey>(() => {
@@ -722,6 +722,24 @@ async function togglePrStatus(next: boolean): Promise<void> {
           />
         </div>
 
+        <!-- 环境与凭据 -->
+        <div
+          v-show="activeTab === 'envs'"
+          id="tabpanel-envs"
+          class="tab-panel"
+          role="tabpanel"
+          aria-labelledby="tab-envs"
+        >
+          <EnvCredsTab
+            :environments="editEnvs"
+            :credentials="credentials"
+            :servers="servers"
+            :users="users"
+            :disabled="saveSubmitting"
+            @update="handleEnvsUpdate"
+          />
+        </div>
+
         <!-- 变量与缓存 -->
         <div
           v-show="activeTab === 'vars'"
@@ -750,24 +768,6 @@ async function togglePrStatus(next: boolean): Promise<void> {
           <div class="triggers-stack">
             <TriggersPanel :project-id="projectId" />
           </div>
-        </div>
-
-        <!-- 环境与凭据 -->
-        <div
-          v-show="activeTab === 'envs'"
-          id="tabpanel-envs"
-          class="tab-panel"
-          role="tabpanel"
-          aria-labelledby="tab-envs"
-        >
-          <EnvCredsTab
-            :environments="editEnvs"
-            :credentials="credentials"
-            :servers="servers"
-            :users="users"
-            :disabled="saveSubmitting"
-            @update="handleEnvsUpdate"
-          />
         </div>
 
       </div><!-- /tab-panels -->

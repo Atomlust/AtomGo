@@ -180,6 +180,8 @@ onMounted(loadSessions)
 
 <template>
   <div class="account">
+    <div class="acct-grid">
+      <div class="acct-col">
     <!-- Identity -->
     <section class="acct-card" aria-labelledby="acct-identity-h">
       <header class="acct-card__h">
@@ -260,7 +262,9 @@ onMounted(loadSessions)
         </div>
       </form>
     </section>
+      </div><!-- /acct-col (left) -->
 
+      <div class="acct-col">
     <!-- Active sessions -->
     <section class="acct-card" aria-labelledby="acct-sessions-h">
       <header class="acct-card__h">
@@ -318,6 +322,8 @@ onMounted(loadSessions)
         <AppButton variant="default" @click="onReopenOnboarding">{{ t('settingsAccount.onboardingBtn') }}</AppButton>
       </div>
     </section>
+      </div><!-- /acct-col (right) -->
+    </div><!-- /acct-grid -->
   </div>
 </template>
 
@@ -326,7 +332,28 @@ onMounted(loadSessions)
   display: flex;
   flex-direction: column;
   gap: 18px;
-  max-width: 720px;
+  /* 铺满可用宽度(外层 .main-inner 已按 --content-max 居中限宽)。 */
+  max-width: var(--content-max);
+}
+
+/* ── 两列自适应:左=身份 + 修改密码,右=活跃会话 + 首次引导 ───────────────── */
+.acct-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  align-items: start;
+}
+.acct-col {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+}
+/* 窄屏回落单列,避免挤压 */
+@media (max-width: 900px) {
+  .acct-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .acct-card {
