@@ -37,7 +37,7 @@ export default {
   dbName: '데이터베이스 이름',
   dbNamePlaceholder: 'atomgo',
   dbDSN: '또는 전체 연결 문자열(DSN, 선택)',
-  dbDSNPlaceholder: 'mysql: user:pass@tcp(host:3306)/db?...',
+  dbDSNPlaceholder: "mysql: user:pass{'@'}tcp(host:3306)/db?...",
   dbDSNHint: '입력하면 연결 문자열로 바로 사용되며 위 필드보다 우선합니다.',
   dbConfiguredSummary: '데이터베이스가 {driver}(으)로 구성되었습니다. 여기서 변경할 필요가 없습니다.',
   dbRestarting: '데이터베이스 연결을 저장했습니다. 구성을 적용하기 위해 재시작하는 중…',

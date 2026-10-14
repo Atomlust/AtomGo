@@ -37,7 +37,7 @@ export default {
   dbName: 'データベース名',
   dbNamePlaceholder: 'atomgo',
   dbDSN: 'または完全な接続文字列(DSN、任意)',
-  dbDSNPlaceholder: 'mysql: user:pass@tcp(host:3306)/db?...',
+  dbDSNPlaceholder: "mysql: user:pass{'@'}tcp(host:3306)/db?...",
   dbDSNHint: '入力した場合は接続文字列として直接使用され、上の項目より優先されます。',
   dbConfiguredSummary: 'データベースは {driver} として設定済みです。ここでの変更は不要です。',
   dbRestarting: 'データベース接続を保存しました。設定を反映するために再起動しています…',
