@@ -7,7 +7,7 @@ export default {
   // ─── 标签页 ─────────────────────────────────────────────────────
   tabCanvas: '流水线编排',
   tabVars: '变量与缓存',
-  tabTriggers: '触发设置',
+  tabTriggers: '触发与规则',
   tabEnvs: '环境与凭据',
   tabStripAria: '流水线配置标签页',
 

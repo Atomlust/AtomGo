@@ -517,7 +517,7 @@ func New(webFS fs.FS, authn auth.Authenticator, opts ...Option) http.Handler {
 		ar.With(requirePermission(auth.PermProjectsWrite)).Patch("/projects/{id}", makeUpdateProjectHandler(p, aud))
 		ar.With(requirePermission(auth.PermProjectsWrite)).Delete("/projects/{id}", makeDeleteProjectHandler(p, aud))
 
-		// 触发设置与分支映射(Story 2.3)。t 为 nil 时 handler 返回 503。
+		// 触发与规则及分支映射(Story 2.3)。t 为 nil 时 handler 返回 503。
 		// secret/reset 须在通用 trigger 路由之外单独注册;均过 auth + 写方法 CSRF。
 		t := o.triggers
 		ar.Get("/projects/{id}/trigger", makeGetTriggerHandler(t))

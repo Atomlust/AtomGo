@@ -8,7 +8,7 @@
  * read-only after a successful save / load.
  *
  * Embedded inside TriggersPanel so it appears in both the standalone triggers page
- * and the pipeline "触发设置" tab.
+ * and the pipeline "触发与规则" tab.
  */
 import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'

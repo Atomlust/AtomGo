@@ -180,7 +180,7 @@ export default {
   vpLocateAria: '{message}。{scope}タブへ移動',
   vpScopeCanvas: 'パイプライン編成',
   vpScopeVars: '変数とキャッシュ',
-  vpScopeTriggers: 'トリガー設定',
+  vpScopeTriggers: 'トリガーとルール',
   vpScopeEnvs: '環境と認証情報',
 
   // ─── RiskAnnotationPanel ───────────────────────────────────────

@@ -180,7 +180,7 @@ export default {
   vpLocateAria: '{message}. Zur Registerkarte {scope} springen',
   vpScopeCanvas: 'Pipeline-Orchestrierung',
   vpScopeVars: 'Variablen und Cache',
-  vpScopeTriggers: 'Trigger-Einstellungen',
+  vpScopeTriggers: 'Auslöser & Regeln',
   vpScopeEnvs: 'Umgebungen und Anmeldedaten',
 
   // ─── RiskAnnotationPanel ───────────────────────────────────────

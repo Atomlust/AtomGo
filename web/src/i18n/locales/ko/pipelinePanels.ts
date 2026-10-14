@@ -180,7 +180,7 @@ export default {
   vpLocateAria: '{message}. {scope} 탭으로 이동',
   vpScopeCanvas: '파이프라인 편성',
   vpScopeVars: '변수와 캐시',
-  vpScopeTriggers: '트리거 설정',
+  vpScopeTriggers: '트리거와 규칙',
   vpScopeEnvs: '환경과 자격 증명',
 
   // ─── RiskAnnotationPanel ───────────────────────────────────────

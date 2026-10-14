@@ -7,7 +7,7 @@ export default {
   // ─── 標籤頁 ─────────────────────────────────────────────────────
   tabCanvas: '流水線編排',
   tabVars: '變數與快取',
-  tabTriggers: '觸發設定',
+  tabTriggers: '觸發與規則',
   tabEnvs: '環境與憑證',
   tabStripAria: '流水線設定標籤頁',
 

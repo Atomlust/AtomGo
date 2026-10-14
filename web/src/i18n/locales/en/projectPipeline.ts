@@ -7,7 +7,7 @@ export default {
   // ─── tabs ───────────────────────────────────────────────────────
   tabCanvas: 'Pipeline Canvas',
   tabVars: 'Variables & Cache',
-  tabTriggers: 'Trigger Settings',
+  tabTriggers: 'Triggers & Rules',
   tabEnvs: 'Environments & Credentials',
   tabStripAria: 'Pipeline configuration tabs',
 

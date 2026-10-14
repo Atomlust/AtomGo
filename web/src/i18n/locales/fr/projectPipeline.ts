@@ -7,7 +7,7 @@ export default {
   // ─── onglets ────────────────────────────────────────────────────
   tabCanvas: 'Canevas du pipeline',
   tabVars: 'Variables et cache',
-  tabTriggers: 'Paramètres de déclenchement',
+  tabTriggers: 'Déclenchements et règles',
   tabEnvs: 'Environnements et identifiants',
   tabStripAria: 'Onglets de configuration du pipeline',
 

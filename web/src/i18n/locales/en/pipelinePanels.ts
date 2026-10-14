@@ -180,7 +180,7 @@ export default {
   vpLocateAria: '{message}. Locate to the {scope} tab',
   vpScopeCanvas: 'Pipeline orchestration',
   vpScopeVars: 'Variables & cache',
-  vpScopeTriggers: 'Trigger settings',
+  vpScopeTriggers: 'Triggers & Rules',
   vpScopeEnvs: 'Environments & credentials',
 
   // ─── RiskAnnotationPanel ───────────────────────────────────────

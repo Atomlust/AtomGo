@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * ProjectPipeline — 4-tab pipeline configuration editor.
- * Tabs: 流水线编排 / 变量与缓存 / 触发设置 / 环境与凭据
+ * Tabs: 流水线编排 / 变量与缓存 / 触发与规则 / 环境与凭据
  * URL state: ?tab=canvas|vars|triggers|envs  (shareable)
  */
 import { ref, shallowRef, computed, onMounted, watch, nextTick } from 'vue'
@@ -757,7 +757,7 @@ async function togglePrStatus(next: boolean): Promise<void> {
           />
         </div>
 
-        <!-- 触发设置 -->
+        <!-- 触发与规则 -->
         <div
           v-show="activeTab === 'triggers'"
           id="tabpanel-triggers"
@@ -1189,7 +1189,7 @@ async function togglePrStatus(next: boolean): Promise<void> {
   padding: var(--main-pad-top) var(--main-pad) var(--main-pad-bottom);
 }
 
-/* 触发设置 tab:面板纵向堆叠 */
+/* 触发与规则 tab:面板纵向堆叠 */
 .triggers-stack {
   display: flex;
   flex-direction: column;

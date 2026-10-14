@@ -180,7 +180,7 @@ export default {
   vpLocateAria: '{message}. Localiser dans l’onglet {scope}',
   vpScopeCanvas: 'Orchestration du Pipeline',
   vpScopeVars: 'Variables et cache',
-  vpScopeTriggers: 'Paramètres de déclenchement',
+  vpScopeTriggers: 'Déclenchements et règles',
   vpScopeEnvs: 'Environnements et identifiants',
 
   // ─── RiskAnnotationPanel ───────────────────────────────────────

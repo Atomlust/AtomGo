@@ -31,7 +31,7 @@ const (
 	ScopeVars = "vars"
 	// ScopeEnvs 对应 2-4 环境与凭据 tab。
 	ScopeEnvs = "envs"
-	// ScopeTriggers 对应 2-3 触发设置 tab。
+	// ScopeTriggers 对应 2-3 触发与规则 tab。
 	ScopeTriggers = "triggers"
 )
 
@@ -281,7 +281,7 @@ func validateEnvs(in ValidationInput) []Issue {
 	return issues
 }
 
-// validateTriggers 校验 2-3 触发设置:分支映射 environment 跨 tab 匹配(核心)+
+// validateTriggers 校验 2-3 触发与规则:分支映射 environment 跨 tab 匹配(核心)+
 // 手动触发提示 + 目标服务器留 4-1。
 func validateTriggers(in ValidationInput) []Issue {
 	var issues []Issue

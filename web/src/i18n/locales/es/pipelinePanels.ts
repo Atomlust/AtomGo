@@ -180,7 +180,7 @@ export default {
   vpLocateAria: '{message}. Localizar en la pestaña {scope}',
   vpScopeCanvas: 'Orquestación del Pipeline',
   vpScopeVars: 'Variables y caché',
-  vpScopeTriggers: 'Ajustes de disparadores',
+  vpScopeTriggers: 'Disparadores y reglas',
   vpScopeEnvs: 'Entornos y credenciales',
 
   // ─── RiskAnnotationPanel ───────────────────────────────────────

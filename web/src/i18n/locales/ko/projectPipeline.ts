@@ -7,7 +7,7 @@ export default {
   // ─── 탭 ─────────────────────────────────────────────────────────
   tabCanvas: '파이프라인 캔버스',
   tabVars: '변수 및 캐시',
-  tabTriggers: '트리거 설정',
+  tabTriggers: '트리거와 규칙',
   tabEnvs: '환경 및 자격 증명',
   tabStripAria: '파이프라인 설정 탭',
 

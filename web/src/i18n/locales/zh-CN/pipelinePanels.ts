@@ -180,7 +180,7 @@ export default {
   vpLocateAria: '{message}。定位到{scope}标签页',
   vpScopeCanvas: '流水线编排',
   vpScopeVars: '变量与缓存',
-  vpScopeTriggers: '触发设置',
+  vpScopeTriggers: '触发与规则',
   vpScopeEnvs: '环境与凭据',
 
   // ─── RiskAnnotationPanel ───────────────────────────────────────
