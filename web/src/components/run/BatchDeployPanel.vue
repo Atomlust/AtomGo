@@ -182,14 +182,14 @@ onUnmounted(() => { if (poll) clearInterval(poll) })
 <style scoped>
 .batch-deploy { margin-top: 24px; padding-top: 22px; border-top: 1px solid #e2e5eb; }
 .batch-head,.row-head,.history-head,.form-actions { display:flex; align-items:center; justify-content:space-between; gap:12px; }
-h2 { margin:0; font-size:17px; } h3 { margin:0 0 12px; font-size:14px; }
+h2 { margin:0; font-size:1.133rem; } h3 { margin:0 0 12px; font-size:0.933rem; }
 .batch-button,.history-actions button { padding:7px 11px; border:1px solid #cfd5df; border-radius:6px; background:#fff; color:#244a77; cursor:pointer; }
 .batch-form { margin-top:16px; }
 .batch-row { padding:15px 0; border-top:1px solid #e7e9ee; }
-.row-head { margin-bottom:12px; font-size:13px; }
-.remove-button { width:30px; height:30px; border:0; background:transparent; color:#687386; font-size:20px; cursor:pointer; }
+.row-head { margin-bottom:12px; font-size:0.867rem; }
+.remove-button { width:30px; height:30px; border:0; background:transparent; color:#687386; font-size:1.333rem; cursor:pointer; }
 .row-fields { display:grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap:14px; }
-.row-fields label,.server-field { min-width:0; display:flex; flex-direction:column; gap:6px; font-size:12px; color:#596575; }
+.row-fields label,.server-field { min-width:0; display:flex; flex-direction:column; gap:6px; font-size:0.8rem; color:#596575; }
 .row-fields input { width:100%; min-width:0; height:38px; box-sizing:border-box; border:1px solid #cfd5df; border-radius:6px; padding:0 10px; background:#fff; color:#18222e; }
 .server-field { margin-top:13px; }
 .server-list { display:flex; flex-wrap:wrap; gap:8px 16px; }
@@ -197,12 +197,12 @@ h2 { margin:0; font-size:17px; } h3 { margin:0 0 12px; font-size:14px; }
 .form-actions { margin-top:6px; justify-content:flex-end; }
 .submit-button { padding:9px 14px; border:0; border-radius:6px; background:#2869c5; color:#fff; cursor:pointer; }
 button:disabled { opacity:.5; cursor:not-allowed; }
-.batch-error { color:#c32f3e; font-size:13px; }
+.batch-error { color:#c32f3e; font-size:0.867rem; }
 .batch-history { margin-top:18px; }
 .history-group { padding:10px 0; border-top:1px solid #e7e9ee; }
-.history-head { margin-bottom:8px; font-size:12px; font-weight:600; }
+.history-head { margin-bottom:8px; font-size:0.8rem; font-weight:600; }
 .history-actions { display:flex; gap:6px; }
-.result-row { display:grid; grid-template-columns:minmax(130px,1fr) minmax(120px,1fr) 90px; gap:8px; align-items:center; padding:5px 0; font-size:12px; }
+.result-row { display:grid; grid-template-columns:minmax(130px,1fr) minmax(120px,1fr) 90px; gap:8px; align-items:center; padding:5px 0; font-size:0.8rem; }
 .result-row code { overflow-wrap:anywhere; }
 .result-status { font-weight:600; }
 .result-status--success { color:#198158; } .result-status--failed,.result-status--rolled_back { color:#c32f3e; }

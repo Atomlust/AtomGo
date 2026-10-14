@@ -92,19 +92,19 @@ defineExpose({ refresh })
 
 <style scoped>
 .pipeline-guide { display: flex; align-items: flex-start; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--color-border); border-left: 3px solid var(--color-primary); background: var(--color-card); flex: none; max-height: 230px; overflow: auto; letter-spacing: 0; }
-.guide-progress { display: grid; place-items: center; flex: none; width: 44px; height: 32px; background: var(--color-primary-soft); color: var(--color-primary); border-radius: 4px; font-size: 12px; font-weight: 600; }
+.guide-progress { display: grid; place-items: center; flex: none; width: 44px; height: 32px; background: var(--color-primary-soft); color: var(--color-primary); border-radius: 4px; font-size: 0.8rem; font-weight: 600; }
 .guide-progress svg { width: 18px; height: 18px; }
 .guide-copy { flex: 1; min-width: 0; }
-.guide-title { font-size: 14px; font-weight: 650; margin: 0 0 4px; }
-.guide-description, .guide-unsaved { margin: 0; font-size: 13px; line-height: 1.6; color: var(--color-dim); overflow-wrap: anywhere; }
+.guide-title { font-size: 0.933rem; font-weight: 650; margin: 0 0 4px; }
+.guide-description, .guide-unsaved { margin: 0; font-size: 0.867rem; line-height: 1.6; color: var(--color-dim); overflow-wrap: anywhere; }
 .guide-unsaved { color: var(--color-primary); margin-top: 4px; }
 .guide-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; max-width: 420px; }
 .guide-actions svg { width: 16px; height: 16px; flex: none; }
-.guide-actions :deep(.app-btn) { white-space: normal; height: auto; min-height: 36px; padding: 6px 10px; font-size: 13px; }
+.guide-actions :deep(.app-btn) { white-space: normal; height: auto; min-height: 36px; padding: 6px 10px; font-size: 0.867rem; }
 .guide-close { display: grid; place-items: center; width: 36px; height: 36px; flex: none; border: 0; border-radius: 4px; background: transparent; color: var(--color-dim); cursor: pointer; }
 .guide-close:hover { background: var(--color-card-2); }
 .guide-close:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
-.guide-issues { margin: 8px 0 0; padding-left: 18px; font-size: 13px; line-height: 1.6; }
+.guide-issues { margin: 8px 0 0; padding-left: 18px; font-size: 0.867rem; line-height: 1.6; }
 .guide-issues a { color: var(--color-primary); overflow-wrap: anywhere; }
 .guide-issues svg { display: inline; width: 14px; height: 14px; vertical-align: middle; }
 @media (max-width: 900px) { .pipeline-guide { flex-wrap: wrap; padding: 12px; gap: 8px; } .guide-actions { flex: 1 0 100%; max-width: none; justify-content: flex-start; padding-left: 52px; } }

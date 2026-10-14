@@ -243,12 +243,12 @@ function portLabel(p: ContainerInspect['ports'][number]): string {
 
 .ci-title {
   margin: 0;
-  font-size: 17px;
+  font-size: 1.133rem;
   font-weight: 650;
 }
 
 .ci-sub {
-  font-size: 13px;
+  font-size: 0.867rem;
   color: var(--color-text-muted, #6b7280);
   word-break: break-all;
 }
@@ -261,7 +261,7 @@ function portLabel(p: ContainerInspect['ports'][number]): string {
   border-radius: 8px;
   background: transparent;
   color: var(--color-text-muted, #6b7280);
-  font-size: 22px;
+  font-size: 1.467rem;
   line-height: 1;
   cursor: pointer;
   transition: background 120ms ease, color 120ms ease;
@@ -292,7 +292,7 @@ function portLabel(p: ContainerInspect['ports'][number]): string {
   align-items: center;
   gap: 10px;
   padding: 24px 4px;
-  font-size: 14px;
+  font-size: 0.933rem;
   color: var(--color-text-muted, #6b7280);
 }
 
@@ -314,7 +314,7 @@ function portLabel(p: ContainerInspect['ports'][number]): string {
 .ci-banner {
   padding: 12px 14px;
   border-radius: 8px;
-  font-size: 13px;
+  font-size: 0.867rem;
   line-height: 1.5;
 }
 
@@ -340,7 +340,7 @@ function portLabel(p: ContainerInspect['ports'][number]): string {
   align-items: center;
   gap: 8px;
   margin: 0 0 8px;
-  font-size: 12px;
+  font-size: 0.8rem;
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -357,7 +357,7 @@ function portLabel(p: ContainerInspect['ports'][number]): string {
   border-radius: 999px;
   background: var(--color-inset, #f3f4f6);
   color: var(--color-text-muted, #6b7280);
-  font-size: 11px;
+  font-size: 0.733rem;
   font-weight: 600;
   letter-spacing: 0;
 }
@@ -367,7 +367,7 @@ function portLabel(p: ContainerInspect['ports'][number]): string {
   grid-template-columns: 88px 1fr;
   gap: 6px 14px;
   margin: 0;
-  font-size: 13px;
+  font-size: 0.867rem;
 }
 
 .ci-kv dt {
@@ -383,7 +383,7 @@ function portLabel(p: ContainerInspect['ports'][number]): string {
   display: inline-block;
   padding: 1px 8px;
   border-radius: 999px;
-  font-size: 12px;
+  font-size: 0.8rem;
   font-weight: 600;
   background: var(--color-inset, #f3f4f6);
   color: var(--color-text, #374151);
@@ -419,7 +419,7 @@ function portLabel(p: ContainerInspect['ports'][number]): string {
 }
 
 .ci-list-item {
-  font-size: 12.5px;
+  font-size: 0.833rem;
   line-height: 1.5;
   word-break: break-all;
 }
@@ -440,7 +440,7 @@ function portLabel(p: ContainerInspect['ports'][number]): string {
   flex: none;
   padding: 1px 6px;
   border-radius: 5px;
-  font-size: 11px;
+  font-size: 0.733rem;
   background: var(--color-inset, #eef2f7);
   color: var(--color-text-muted, #6b7280);
 }
@@ -453,7 +453,7 @@ function portLabel(p: ContainerInspect['ports'][number]): string {
 .ci-empty {
   margin: 0;
   padding: 8px 2px;
-  font-size: 13px;
+  font-size: 0.867rem;
   color: var(--color-text-muted, #9ca3af);
 }
 

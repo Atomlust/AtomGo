@@ -194,6 +194,7 @@ const hasData = computed(() => lines.value.some((l) => l.paths.length > 0))
 }
 .trend__axis {
   fill: var(--color-faint, var(--color-dim));
+  /* SVG <text>:有意保留 px,不随根字号缩放,以免破坏图表几何与刻度对齐。 */
   font-size: 10px;
   font-variant-numeric: tabular-nums;
 }

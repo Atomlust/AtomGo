@@ -245,7 +245,7 @@ async function runAction(a: ServiceAction): Promise<void> {
 }
 
 .ops-field-label {
-  font-size: 12px;
+  font-size: 0.8rem;
   color: var(--color-text-muted, #6b7280);
 }
 
@@ -255,7 +255,7 @@ async function runAction(a: ServiceAction): Promise<void> {
   border-radius: 6px;
   background: var(--color-surface, #fff);
   color: var(--color-text, #111827);
-  font-size: 14px;
+  font-size: 0.933rem;
 }
 
 .ops-input:focus-visible {
@@ -269,7 +269,7 @@ async function runAction(a: ServiceAction): Promise<void> {
 
 .ops-hint {
   margin: 0;
-  font-size: 12px;
+  font-size: 0.8rem;
   color: var(--color-text-muted, #6b7280);
 }
 
@@ -293,7 +293,7 @@ async function runAction(a: ServiceAction): Promise<void> {
   border-radius: 6px;
   background: var(--color-surface, #fff);
   color: var(--color-text, #111827);
-  font-size: 14px;
+  font-size: 0.933rem;
   font-weight: 500;
   cursor: pointer;
   transition: background 120ms ease, border-color 120ms ease, transform 120ms ease;
@@ -328,14 +328,14 @@ async function runAction(a: ServiceAction): Promise<void> {
 }
 
 .ops-busy {
-  font-size: 13px;
+  font-size: 0.867rem;
   color: var(--color-text-muted, #6b7280);
 }
 
 .ops-banner {
   padding: 8px 12px;
   border-radius: 6px;
-  font-size: 13px;
+  font-size: 0.867rem;
 }
 
 .ops-banner--error {
@@ -367,13 +367,13 @@ async function runAction(a: ServiceAction): Promise<void> {
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 13px;
+  font-size: 0.867rem;
 }
 
 .ops-result-badge {
   padding: 2px 8px;
   border-radius: 999px;
-  font-size: 12px;
+  font-size: 0.8rem;
   font-weight: 600;
 }
 
@@ -394,7 +394,7 @@ async function runAction(a: ServiceAction): Promise<void> {
   border-radius: 6px;
   background: #0b0f17;
   color: #e5e7eb;
-  font-size: 12px;
+  font-size: 0.8rem;
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
@@ -431,14 +431,14 @@ async function runAction(a: ServiceAction): Promise<void> {
 
 .ops-confirm-title {
   margin: 0;
-  font-size: 16px;
+  font-size: 1.067rem;
   font-weight: 600;
   color: var(--color-text, #111827);
 }
 
 .ops-confirm-body {
   margin: 0;
-  font-size: 14px;
+  font-size: 0.933rem;
   line-height: 1.6;
   color: var(--color-text, #374151);
 }

@@ -96,7 +96,7 @@ function action(a: FlowAction): void {
 </template>
 
 <style scoped>
-.onboarding { width: 100%; max-width: 880px; margin: 0 auto; padding: 24px 0 48px; color: var(--color-text); font-size: 16px; letter-spacing: 0; overflow-wrap: anywhere; }
+.onboarding { width: 100%; max-width: 880px; margin: 0 auto; padding: 24px 0 48px; color: var(--color-text); font-size: 1.067rem; letter-spacing: 0; overflow-wrap: anywhere; }
 .flow-header { margin-bottom: 24px; }
 .flow-title { font-size: 1.5rem; font-weight: 650; margin: 0 0 8px; }
 .flow-intro, .next-description, .step-detail, .runtime-help { line-height: 1.6; color: var(--color-dim); }
@@ -125,7 +125,7 @@ function action(a: FlowAction): void {
 .next-description { margin: 0 0 16px; }
 .flow-issues { padding-left: 20px; margin-bottom: 16px; color: var(--color-dim); line-height: 1.6; }
 .flow-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.flow-actions :deep(.app-btn), .flow-footer :deep(.app-btn), .step-detail :deep(.app-btn) { min-height: 44px; height: auto; white-space: normal; overflow-wrap: anywhere; padding-top: 10px; padding-bottom: 10px; max-width: 100%; font-size: 16px; }
+.flow-actions :deep(.app-btn), .flow-footer :deep(.app-btn), .step-detail :deep(.app-btn) { min-height: 44px; height: auto; white-space: normal; overflow-wrap: anywhere; padding-top: 10px; padding-bottom: 10px; max-width: 100%; font-size: 1.067rem; }
 .runtime-help { border-top: 1px solid var(--color-border); padding: 16px 0; }
 .runtime-help summary { cursor: pointer; min-height: 44px; display: list-item; padding-top: 8px; }
 .runtime-help p { margin: 8px 0; }

@@ -180,13 +180,13 @@ const render = () => (tokens.value ? renderItems(tokens.value) : props.text)
 }
 .ops-markdown :deep(h1),
 .ops-markdown :deep(h2) {
-  font-size: 16px;
+  font-size: 1.067rem;
 }
 .ops-markdown :deep(h3),
 .ops-markdown :deep(h4),
 .ops-markdown :deep(h5),
 .ops-markdown :deep(h6) {
-  font-size: 14px;
+  font-size: 0.933rem;
 }
 .ops-markdown :deep(h1),
 .ops-markdown :deep(h2),
@@ -207,7 +207,7 @@ const render = () => (tokens.value ? renderItems(tokens.value) : props.text)
 }
 .ops-markdown :deep(code) {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 0.8rem;
   background: var(--color-inset);
   padding: 2px 4px;
   border-radius: 3px;

@@ -171,7 +171,7 @@ const bytes = (n: number): string =>
   line-height: 1.6;
 }
 .result-status {
-  font-size: 12px;
+  font-size: 0.8rem;
 }
 .metrics {
   border-top: 1px solid var(--color-border);

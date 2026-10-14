@@ -242,6 +242,7 @@ function run(): void {
 @media (max-width: 600px) {
   .composer input,
   .composer textarea {
+    /* iOS 防自动缩放:输入框字号必须 ≥16px,故有意保留 px,不随根字号缩放。 */
     font-size: 16px;
   }
 }

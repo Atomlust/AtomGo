@@ -27,7 +27,11 @@
 }
 
 html {
-  font-size: 15px;
+  /* 根字号(整个排版尺度以 rem 为基准,改这里即等比缩放全部文字)。
+     原为 15px → 正文仅 12.9px、最小字 10.2px,偏小;提到 16.5px 后正文约 14.2px。
+     间距/圆角/宽度令牌(--space-* / --rounded-* / --content-max)都是 px,
+     故**只放大文字、不影响布局**。想再大/小改这一个值即可:15=原状,16=+6.7%,16.5=+10%,17=+13%。 */
+  font-size: 16.5px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }

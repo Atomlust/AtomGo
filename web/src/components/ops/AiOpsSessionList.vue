@@ -134,7 +134,7 @@ form.session-actions {
   flex: 1;
   min-width: 0;
   overflow-wrap: anywhere;
-  font-size: 13px;
+  font-size: 0.867rem;
   margin: 0;
 }
 .session-list {

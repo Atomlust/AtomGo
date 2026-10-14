@@ -1176,7 +1176,8 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 8px;
   font-family: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  font-size: 13px; /* 与 xterm fontSize 对齐 */
+  /* 有意保留 px:须与 xterm.js 的 fontSize(px)严格对齐,否则终端字符栅格错位。 */
+  font-size: 13px;
   white-space: pre;
   cursor: pointer;
   user-select: none;

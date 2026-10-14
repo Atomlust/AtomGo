@@ -727,7 +727,7 @@ function maskFor(row: VarRow): string {
 
 /* ─── Per-env chain flags + ordering ───────────────────────────────── */
 .env-flags { display: flex; align-items: center; gap: 12px; }
-.eg-hint { margin-left: 6px; font-size: 11px; font-weight: 400; color: var(--color-text-tertiary); }
+.eg-hint { margin-left: 6px; font-size: 0.733rem; font-weight: 400; color: var(--color-text-tertiary); }
 .fl {
   display: inline-flex;
   align-items: center;

@@ -715,7 +715,7 @@ function edgeClass(status: string): string {
 
 /* 阶段头部状态徽标:小药丸,文字 + 配色随聚合状态(失败/未执行红、成功绿、进行中琥珀)。 */
 .stage-status-badge {
-  font-size: 10px;
+  font-size: 0.667rem;
   font-weight: 700;
   line-height: 1;
   padding: 2px 6px;

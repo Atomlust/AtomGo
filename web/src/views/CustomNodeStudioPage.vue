@@ -551,16 +551,16 @@ async function onSave(): Promise<void> {
   place-items: center;
   background: linear-gradient(145deg, #2b3f9e, #4a6bff);
   color: #fff;
-  font-size: 19px;
+  font-size: 1.267rem;
   box-shadow: var(--shadow-sm, 0 1px 2px rgba(20, 26, 34, 0.06));
 }
 .brand h1 {
-  font-size: 15px;
+  font-size: 1rem;
   margin: 0;
   letter-spacing: 0.2px;
 }
 .brand p {
-  font-size: 11.5px;
+  font-size: 0.767rem;
   margin: 0;
   color: var(--color-faint);
 }
@@ -569,7 +569,7 @@ async function onSave(): Promise<void> {
 }
 .node-name {
   font-weight: 600;
-  font-size: 15px;
+  font-size: 1rem;
   border: 1px solid var(--color-border-strong);
   border-radius: 10px;
   padding: 8px 12px;
@@ -588,7 +588,7 @@ async function onSave(): Promise<void> {
   color: var(--color-text);
   border-radius: 10px;
   padding: 9px 15px;
-  font-size: 13px;
+  font-size: 0.867rem;
   font-weight: 600;
   cursor: pointer;
   transition: 0.14s;
@@ -615,7 +615,7 @@ async function onSave(): Promise<void> {
   margin: 6px 0 20px;
 }
 .hero .eyebrow {
-  font-size: 11px;
+  font-size: 0.733rem;
   letter-spacing: 2.5px;
   text-transform: uppercase;
   color: var(--color-primary);
@@ -674,7 +674,7 @@ async function onSave(): Promise<void> {
   box-shadow: var(--shadow-sm, 0 1px 2px rgba(20, 26, 34, 0.06));
 }
 .panel-title {
-  font-size: 12px;
+  font-size: 0.8rem;
   letter-spacing: 0.4px;
   text-transform: uppercase;
   color: var(--color-faint);
@@ -689,14 +689,14 @@ async function onSave(): Promise<void> {
   padding-bottom: 8px;
 }
 .hint {
-  font-size: 11px;
+  font-size: 0.733rem;
   color: var(--color-faint);
   padding: 12px 16px 6px;
   line-height: 1.55;
   margin: 0;
 }
 .pal-group {
-  font-size: 10.5px;
+  font-size: 0.7rem;
   letter-spacing: 1.2px;
   text-transform: uppercase;
   color: var(--color-faint);
@@ -717,7 +717,7 @@ async function onSave(): Promise<void> {
   transition: 0.12s;
   text-align: left;
   font: inherit;
-  font-size: 12.5px;
+  font-size: 0.833rem;
   color: var(--color-text);
   user-select: none;
 }
@@ -739,7 +739,7 @@ async function onSave(): Promise<void> {
 }
 .pal-grip {
   color: var(--color-faint);
-  font-size: 12px;
+  font-size: 0.8rem;
   margin-left: auto;
 }
 
@@ -796,7 +796,7 @@ async function onSave(): Promise<void> {
   cursor: grabbing;
 }
 .step-kind {
-  font-size: 11px;
+  font-size: 0.733rem;
   font-weight: 700;
   letter-spacing: 0.3px;
   text-transform: uppercase;
@@ -810,13 +810,13 @@ async function onSave(): Promise<void> {
   border: 1px solid var(--color-border);
   display: grid;
   place-items: center;
-  font-size: 11px;
+  font-size: 0.733rem;
   font-family: var(--font-mono);
   color: var(--color-faint);
 }
 .step-grip {
   color: var(--color-faint);
-  font-size: 12px;
+  font-size: 0.8rem;
 }
 .step-tools {
   display: flex;
@@ -830,7 +830,7 @@ async function onSave(): Promise<void> {
   border-radius: 7px;
   cursor: pointer;
   color: var(--color-faint);
-  font-size: 12px;
+  font-size: 0.8rem;
   display: grid;
   place-items: center;
 }
@@ -856,7 +856,7 @@ async function onSave(): Promise<void> {
   min-width: 0;
 }
 .field-label {
-  font-size: 11px;
+  font-size: 0.733rem;
   color: var(--color-faint);
   display: block;
   margin-bottom: 3px;
@@ -866,7 +866,7 @@ async function onSave(): Promise<void> {
   border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 8px 10px;
-  font-size: 12.5px;
+  font-size: 0.833rem;
   color: var(--color-text);
   background: var(--color-inset);
   outline: none;
@@ -892,7 +892,7 @@ async function onSave(): Promise<void> {
   text-align: center;
   padding: 8px;
   font: inherit;
-  font-size: 12.5px;
+  font-size: 0.833rem;
   font-weight: 600;
   color: var(--color-faint);
   border: 1px solid transparent;
@@ -908,13 +908,13 @@ async function onSave(): Promise<void> {
   padding: 12px 14px 16px;
 }
 .col-hint {
-  font-size: 11px;
+  font-size: 0.733rem;
   color: var(--color-faint);
   margin: 0 0 10px;
   line-height: 1.5;
 }
 .param-empty {
-  font-size: 12px;
+  font-size: 0.8rem;
   color: var(--color-faint);
   font-style: italic;
   padding: 6px 0;
@@ -933,7 +933,7 @@ async function onSave(): Promise<void> {
 }
 .param-row .pk {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 0.8rem;
   color: var(--param);
   font-weight: 700;
 }
@@ -942,7 +942,7 @@ async function onSave(): Promise<void> {
   border: 1px solid #ecdcb0;
   border-radius: 7px;
   padding: 6px 8px;
-  font-size: 12px;
+  font-size: 0.8rem;
   background: #fff;
   color: #161a22;
   outline: none;
@@ -966,7 +966,7 @@ async function onSave(): Promise<void> {
   border-radius: 7px;
   cursor: pointer;
   color: var(--param);
-  font-size: 11px;
+  font-size: 0.733rem;
 }
 .param-del:hover {
   background: var(--param-soft);
@@ -974,7 +974,7 @@ async function onSave(): Promise<void> {
 .add-link {
   color: var(--color-primary);
   font: inherit;
-  font-size: 12.5px;
+  font-size: 0.833rem;
   font-weight: 600;
   cursor: pointer;
   background: none;
@@ -998,7 +998,7 @@ async function onSave(): Promise<void> {
   border-radius: 8px;
   padding: 8px 10px;
   font: inherit;
-  font-size: 13px;
+  font-size: 0.867rem;
   background: var(--color-inset);
   color: var(--color-text);
   outline: none;
@@ -1035,13 +1035,13 @@ async function onSave(): Promise<void> {
   padding: 14px 16px;
 }
 .preview-warn {
-  font-size: 11.5px;
+  font-size: 0.767rem;
   color: var(--param);
   margin-bottom: 8px;
 }
 .code {
   font-family: var(--font-mono);
-  font-size: 12.5px;
+  font-size: 0.833rem;
   line-height: 1.65;
   white-space: pre-wrap;
   word-break: break-word;
@@ -1083,17 +1083,17 @@ async function onSave(): Promise<void> {
   place-items: center;
   background: var(--color-primary-soft);
   color: var(--color-primary);
-  font-size: 15px;
+  font-size: 1rem;
 }
 .pv-nm b {
-  font-size: 14px;
+  font-size: 0.933rem;
 }
 .pv-cat {
-  font-size: 11px;
+  font-size: 0.733rem;
   color: var(--color-faint);
 }
 .pv-sub {
-  font-size: 12px;
+  font-size: 0.8rem;
   color: var(--color-faint);
   margin: 6px 0 14px;
   min-height: 1em;
@@ -1102,7 +1102,7 @@ async function onSave(): Promise<void> {
   margin-bottom: 11px;
 }
 .inst-param label {
-  font-size: 11.5px;
+  font-size: 0.767rem;
   color: var(--color-faint);
   display: flex;
   gap: 6px;
@@ -1111,7 +1111,7 @@ async function onSave(): Promise<void> {
 }
 .inst-param .pk2 {
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: 0.7rem;
   color: var(--param);
   background: var(--param-soft);
   padding: 0 4px;
@@ -1124,13 +1124,13 @@ async function onSave(): Promise<void> {
   border-radius: 8px;
   padding: 7px 9px;
   font: inherit;
-  font-size: 12.5px;
+  font-size: 0.833rem;
   background: var(--color-inset);
   color: var(--color-text);
   outline: none;
 }
 .note {
-  font-size: 11px;
+  font-size: 0.733rem;
   color: var(--color-faint);
   margin-top: 12px;
   line-height: 1.5;

@@ -363,7 +363,7 @@ onBeforeUnmount(() => {
   background: var(--lp-bg);
   color: var(--lp-text);
   font-family: var(--font-sans);
-  font-size: 14px;
+  font-size: 0.933rem;
   line-height: 1.5;
 }
 
@@ -506,13 +506,13 @@ onBeforeUnmount(() => {
   place-items: center;
   color: #fff;
   font-weight: 700;
-  font-size: 15px;
+  font-size: 1rem;
   background: linear-gradient(135deg, var(--lp-blue), var(--lp-cyan));
   box-shadow: 0 6px 22px rgba(59, 130, 246, 0.5);
 }
 .brand-name {
   font-weight: 700;
-  font-size: 17px;
+  font-size: 1.133rem;
   letter-spacing: -0.01em;
 }
 .brand-name__w {
@@ -632,7 +632,7 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 8px;
   font-family: var(--font-mono, monospace);
-  font-size: 11px;
+  font-size: 0.733rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--lp-dim);
@@ -659,7 +659,7 @@ onBeforeUnmount(() => {
   position: relative;
   z-index: 4;
   font-weight: 700;
-  font-size: 30px;
+  font-size: 2rem;
   letter-spacing: -0.025em;
   line-height: 1.14;
 }
@@ -690,7 +690,7 @@ onBeforeUnmount(() => {
   position: relative;
   z-index: 4;
   color: var(--lp-dim);
-  font-size: 14.5px;
+  font-size: 0.967rem;
   margin-top: 10px;
 }
 
@@ -710,7 +710,7 @@ onBeforeUnmount(() => {
   background: rgba(244, 63, 94, 0.13);
   border: 1px solid rgba(244, 63, 94, 0.4);
   color: #fda4af;
-  font-size: 13px;
+  font-size: 0.867rem;
   line-height: 1.5;
   margin-bottom: 18px;
 }
@@ -730,7 +730,7 @@ onBeforeUnmount(() => {
 }
 .field__label {
   display: block;
-  font-size: 12.5px;
+  font-size: 0.833rem;
   font-weight: 600;
   color: var(--lp-dim);
   margin-bottom: 8px;
@@ -760,7 +760,7 @@ onBeforeUnmount(() => {
   border: 1px solid var(--lp-brd);
   color: var(--lp-text);
   font-family: var(--font-sans);
-  font-size: 14.5px;
+  font-size: 0.967rem;
   outline: none;
   transition:
     border-color 0.2s,
@@ -807,7 +807,7 @@ onBeforeUnmount(() => {
 }
 .field__error {
   display: block;
-  font-size: 12px;
+  font-size: 0.8rem;
   color: #fda4af;
   margin-top: 7px;
 }
@@ -823,7 +823,7 @@ onBeforeUnmount(() => {
   cursor: pointer;
   overflow: hidden;
   font-family: var(--font-sans);
-  font-size: 15px;
+  font-size: 1rem;
   font-weight: 700;
   color: #fff;
   letter-spacing: 0.01em;
@@ -908,7 +908,7 @@ onBeforeUnmount(() => {
   justify-content: center;
   gap: 16px;
   font-family: var(--font-mono, monospace);
-  font-size: 11px;
+  font-size: 0.733rem;
   letter-spacing: 0.06em;
   color: var(--lp-faint);
   animation: rise 0.9s 0.9s ease both;
@@ -964,7 +964,7 @@ onBeforeUnmount(() => {
     padding: 32px 26px 28px;
   }
   .headline {
-    font-size: 26px;
+    font-size: 1.733rem;
   }
 }
 </style>

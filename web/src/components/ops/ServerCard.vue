@@ -1520,7 +1520,7 @@ async function doRemoveImage(img: ImageInfo): Promise<void> {
 }
 .srow__caret {
   color: var(--color-faint);
-  font-size: 11px;
+  font-size: 0.733rem;
   transition: transform var(--duration-fast) var(--ease-out-expo);
 }
 .srow__caret--open { transform: rotate(90deg); color: var(--color-accent); }
