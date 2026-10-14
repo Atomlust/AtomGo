@@ -46,3 +46,24 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # 发版后把 ghcr.io 包设为公开:否则匿名 docker pull 会 401(unauthorized)。
+      # 可见性按「包」设置,一次覆盖 1.0.0 / latest 等所有 tag;GITHUB_TOKEN 已具备 packages:write。
+      # 仅改可见性,即使 API 抖动也不应阻断已发布的 Release,故 continue-on-error。
+      - name: make ghcr package public
+        if: success()
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for i in 1 2 3; do
+            code=$(curl -sS -o /dev/null -w "%{http_code}" \
+              -X PATCH \
+              -H "Authorization: Bearer $GITHUB_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/orgs/atomlust/packages/container/atomgo/visibility" \
+              -d '{"visibility":"public"}')
+            echo "set ghcr visibility -> HTTP $code"
+            [ "$code" = "204" ] && break
+            sleep 5
+          done
