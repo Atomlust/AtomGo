@@ -286,12 +286,15 @@ func validateEnvs(in ValidationInput) []Issue {
 func validateTriggers(in ValidationInput) []Issue {
 	var issues []Issue
 
-	// 已定义环境名集合(trim 后精确匹配、大小写敏感)。
+	// 已定义环境名集合(trim 后精确匹配、大小写敏感)+ 环境 registry 绑定状态。
 	defined := make(map[string]struct{}, len(in.Environments))
+	bound := make(map[string]bool, len(in.Environments))
 	for _, env := range in.Environments {
 		name := strings.TrimSpace(env.Name)
 		if name != "" {
 			defined[name] = struct{}{}
+			// registry 绑定判定与 builder.resolveRegistry 一致:type 与 url 均非空才算绑定。
+			bound[name] = strings.TrimSpace(env.ImageRegistry.Type) != "" && strings.TrimSpace(env.ImageRegistry.URL) != ""
 		}
 	}
 
@@ -306,6 +309,14 @@ func validateTriggers(in ValidationInput) []Issue {
 					Severity: SeverityError, Code: "environment_undefined", Scope: ScopeTriggers,
 					Field:   prefix + ".environment",
 					Message: "分支映射「" + strings.TrimSpace(m.BranchPattern) + "」引用的环境「" + envName + "」未在「环境与凭据」中定义",
+				})
+			} else if !bound[envName] {
+				// 环境已定义但未绑定 registry → warning:构建后镜像留本地,不自动推送
+				// (运行期 builder.resolveRegistry 的放行条件,提前在配置态暴露)。
+				issues = append(issues, Issue{
+					Severity: SeverityWarning, Code: "environment_registry_unbound", Scope: ScopeTriggers,
+					Field:   prefix + ".environment",
+					Message: "分支映射「" + strings.TrimSpace(m.BranchPattern) + "」指向的环境「" + envName + "」未绑定镜像仓库,构建后镜像将留在本地、不会自动推送",
 				})
 			}
 		}

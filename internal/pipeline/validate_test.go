@@ -23,7 +23,9 @@ func validBase() ValidationInput {
 		},
 		Build: BuildConfig{Model: BuildModelDockerfile, DockerfilePath: "Dockerfile"},
 		Environments: []ValidationEnvironment{
-			{Name: "生产"},
+			// 绑定 registry 的分支映射环境(否则 triggers 校验会报 registry_unbound warning)。
+			// 凭据标记存在,避免 registry_credential_missing。
+			{Name: "生产", ImageRegistry: ValidationRegistry{Type: RegistryHarbor, URL: "harbor.local", CredentialID: "cred", CredentialExists: true}},
 		},
 		BranchMappings: []ValidationBranchMapping{
 			{BranchPattern: "main", Environment: "生产"},
@@ -203,6 +205,35 @@ func TestValidateEnvironmentUndefinedCrossTab(t *testing.T) {
 	}
 	if Ready(issues) {
 		t.Fatalf("引用未定义环境不应 ready")
+	}
+}
+
+// TestValidateEnvironmentRegistryUnbound:映射指向的环境已定义但未绑定 registry
+// → warning(镜像将留本地);绑定后不再报。
+func TestValidateEnvironmentRegistryUnbound(t *testing.T) {
+	in := validBase()
+	in.Environments = []ValidationEnvironment{{Name: "生产"}}
+	in.BranchMappings = []ValidationBranchMapping{{BranchPattern: "main", Environment: "生产"}}
+	is, ok := hasCode(Validate(in), "environment_registry_unbound")
+	if !ok {
+		t.Fatal("环境未绑定 registry 应报 environment_registry_unbound")
+	}
+	if is.Severity != SeverityWarning || is.Scope != ScopeTriggers {
+		t.Fatalf("应 warning/triggers, got %s/%s", is.Severity, is.Scope)
+	}
+	// 绑定(type+url 均非空)→ 不再报。
+	in.Environments = []ValidationEnvironment{
+		{Name: "生产", ImageRegistry: ValidationRegistry{Type: RegistryHarbor, URL: "harbor.local"}},
+	}
+	if _, ok := hasCode(Validate(in), "environment_registry_unbound"); ok {
+		t.Fatal("绑定 registry 后不应再报 environment_registry_unbound")
+	}
+	// 只选类型没填 URL → 仍报(与 builder.resolveRegistry 放行条件一致)。
+	in.Environments = []ValidationEnvironment{
+		{Name: "生产", ImageRegistry: ValidationRegistry{Type: RegistryHarbor}},
+	}
+	if _, ok := hasCode(Validate(in), "environment_registry_unbound"); !ok {
+		t.Fatal("只有类型没有 URL 应报 environment_registry_unbound")
 	}
 }
 
