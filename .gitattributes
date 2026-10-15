@@ -1,0 +1,6 @@
+# 强制所有文本文件以 LF 行尾存储与检出,消除仓库内 CRLF/LF 混合
+# 导致 gofmt -l 在 CI(Linux checkout 原样写出 blob)与本地(autocrlf)全仓报错的隐患。
+* text=auto eol=lf
+
+# Windows 批处理脚本保留 CRLF,避免 cmd.exe 解析异常。
+*.bat text eol=crlf
