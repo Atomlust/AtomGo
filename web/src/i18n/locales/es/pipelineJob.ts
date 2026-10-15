@@ -67,7 +67,7 @@ export default {
   fieldPortsLabel: 'Mapeo de puertos',
   fieldPortsHint: 'Despliegue de imagen: separado por comas / espacios, cada elemento se expande a docker run -p <map>',
   fieldRunArgsLabel: 'Argumentos de docker run',
-  fieldRunArgsHint: 'Despliegue de imagen: se añaden tal cual a docker run (argumentos libres; para credenciales usa el login del registry, no los pongas aquí)',
+  fieldRunArgsHint: 'Despliegue de imagen: se añaden tal cual a docker run (envuelve entre comillas los valores con espacios; las variables de ámbito de entorno se inyectan automáticamente vía --env-file; guarda las credenciales en la cámara acorazada, no las pongas aquí)',
   fieldStrategyLabel: 'Estrategia de despliegue',
   fieldRestartCommandLabel: 'Comando de reinicio / cambio',
   fieldRestartCommandHint:

@@ -67,7 +67,7 @@ export default {
   fieldPortsLabel: 'Mappage des ports',
   fieldPortsHint: 'Déploiement d’image : séparé par virgules / espaces, chaque élément s’étend en docker run -p <map>',
   fieldRunArgsLabel: 'Arguments docker run',
-  fieldRunArgsHint: 'Déploiement d’image : ajoutés tels quels à docker run (arguments libres ; pour les identifiants, utilisez la connexion au registry, ne les mettez pas ici)',
+  fieldRunArgsHint: 'Déploiement d’image : ajoutés tels quels à docker run (entourez de guillemets les valeurs contenant des espaces ; les variables d’environnement sont injectées automatiquement via --env-file ; stockez les identifiants dans le coffre, ne les mettez pas ici)',
   fieldStrategyLabel: 'Stratégie de déploiement',
   fieldRestartCommandLabel: 'Commande de redémarrage / bascule',
   fieldRestartCommandHint:

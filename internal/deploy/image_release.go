@@ -44,9 +44,11 @@ func imageContainerName(a run.Artifact, cfg map[string]string) string {
 // 各参数原样作为 array 元素(绝不拼接 shell;AC-SEC-02),依序拼到 `docker run -d --name <name>` 之后、
 // 镜像 ref 之前:
 //   - cfg["ports"]   : 端口映射,逗号 / 空白分隔,每项展开为 `-p <map>`(如 "8080:80,9000:9000")。
-//   - cfg["runArgs"] : 任意 docker run 参数,按空白切词逐元素追加(如 "-e KEY=v --restart always")。
+//   - cfg["runArgs"] : 任意 docker run 参数,经 splitRunArgs 引号感知切分(如
+//     `-e ConnectionStrings__Sqlite="Data Source=/data/app.db"` 值含空白也保持单个参数)。
 //
-// 注意:凭据绝不经此进命令(registry 凭据沿用既有 docker login 模式);此处仅承载端口 / 运行参数。
+// 注意:凭据绝不经此进命令(registry 凭据沿用既有 docker login 模式;环境作用域变量走
+// --env-file 注入,见 stageImageOne);此处仅承载端口 / 运行参数。
 func imageRunArgs(cfg map[string]string) []string {
 	if cfg == nil {
 		return nil
@@ -55,7 +57,79 @@ func imageRunArgs(cfg map[string]string) []string {
 	for _, p := range splitImageList(cfg["ports"]) {
 		args = append(args, "-p", p)
 	}
-	args = append(args, strings.Fields(cfg["runArgs"])...)
+	args = append(args, splitRunArgs(cfg["runArgs"])...)
+	return args
+}
+
+// splitRunArgs 把 runArgs 文本切为 docker run 的独立参数(引号感知,替代早先 strings.Fields):
+//   - 空白分隔;双引号 / 单引号包裹的内容可含空白(引号本身剥除,值原样保留);
+//   - 双引号内支持 \" 与 \\ 转义;引号外 \ 转义下一字符(含空白);
+//   - 引号未闭合 → 宽容处理:剩余内容悉数作为当前参数(不报错,配置态人读)。
+//
+// 每个 token 作为独立 argv 元素传给 docker(exec array,绝不经过 shell,守 AC-SEC-02):
+// 含空格的值(如 ADO.NET 连接串 `Data Source=...`)因此能完整抵达 docker,不再被拆断。
+func splitRunArgs(s string) []string {
+	var (
+		args []string
+		cur  strings.Builder
+		has  bool // 当前参数已开始(用于产出空引号 "" 这类 token)
+	)
+	const (
+		stBare = iota // 引号外
+		stDQuote
+		stSQuote
+	)
+	state, escaped := stBare, false
+	flush := func() {
+		if has {
+			args = append(args, cur.String())
+			cur.Reset()
+			has = false
+		}
+	}
+	for _, r := range s {
+		if escaped {
+			cur.WriteRune(r)
+			escaped = false
+			continue
+		}
+		switch r {
+		case '\\':
+			if state == stDQuote || state == stBare {
+				escaped = true // 双引号内/引号外:\ 转义下一字符
+				continue
+			}
+			cur.WriteRune(r) // 单引号内:\ 为普通字符
+		case '"':
+			switch state {
+			case stBare:
+				state, has = stDQuote, true
+			case stDQuote:
+				state = stBare
+			default:
+				cur.WriteRune(r)
+			}
+		case '\'':
+			switch state {
+			case stBare:
+				state, has = stSQuote, true
+			case stSQuote:
+				state = stBare
+			default:
+				cur.WriteRune(r)
+			}
+		case ' ', '\t', '\n', '\r':
+			if state == stBare {
+				flush()
+				continue
+			}
+			cur.WriteRune(r)
+		default:
+			cur.WriteRune(r)
+			has = true
+		}
+	}
+	flush()
 	return args
 }
 
@@ -81,13 +155,24 @@ func dockerRunCmd(name string, runArgs []string, ref string) []string {
 }
 
 // stageImageOne 执行 image 蓝绿**预备阶段**:pull 新镜像(不停旧容器)+ 探测当前容器镜像(回滚目标)。
-// 拉取失败 → (中间态, 人读 message, false)。
+// 若本次部署经 ctx 携带环境变量(环境作用域变量注入):先落 env 文件到目标机
+// /tmp/atomgo/env/<容器名>.env(600),并把 `--env-file <文件>` 追加进 docker run 参数——
+// 容器由此获得环境卡片配置的变量(明文 + 保险库 secret 即时解密值)。写入失败 → 预备失败
+// (尚未触碰旧容器,安全中止;不谎报成功)。
 func (s *service) stageImageOne(ctx context.Context, srv *target.Server, a run.Artifact, cfg map[string]string) (imageState, string, bool) {
 	st := imageState{name: imageContainerName(a, cfg), ref: strings.TrimSpace(a.Reference), runArgs: imageRunArgs(cfg)}
 	if st.ref == "" {
 		return st, "image 产物缺少 reference(repo:tag 或镜像 id)", false
 	}
 	execCtx := ctx
+
+	// 环境变量注入(镜像):env 文件按容器名分文件,回滚容器的 docker run 同样沿用(参数在 st.runArgs)。
+	if env := envFileFromCtx(execCtx); len(env) > 0 {
+		if msg, ok := s.writeImageEnvFile(execCtx, srv.ID, st.name, env); !ok {
+			return st, "环境变量写入失败:" + msg, false
+		}
+		st.runArgs = append(st.runArgs, "--env-file", imageEnvFilePath(st.name))
+	}
 
 	// 探测当前同名容器所用镜像(供回滚);无容器 / 读失败 → 空(首次部署,无可回滚)。
 	st.prevImage = s.readContainerImage(execCtx, srv.ID, st.name)

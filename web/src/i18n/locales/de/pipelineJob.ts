@@ -67,7 +67,7 @@ export default {
   fieldPortsLabel: 'Port-Mapping',
   fieldPortsHint: 'Image-Bereitstellung: durch Komma / Leerzeichen getrennt, jedes Element wird zu docker run -p <map> erweitert',
   fieldRunArgsLabel: 'docker-run-Argumente',
-  fieldRunArgsHint: 'Image-Bereitstellung: unverändert an docker run angehängt (beliebige Argumente; für Anmeldedaten den Registry-Login nutzen, nicht hier eintragen)',
+  fieldRunArgsHint: 'Image-Bereitstellung: unverändert an docker run angehängt (Werte mit Leerzeichen in Anführungszeichen setzen; umgebungsbezogene Variablen werden automatisch per --env-file injiziert; Anmeldedaten im Tresor speichern, nicht hier eintragen)',
   fieldStrategyLabel: 'Bereitstellungsstrategie',
   fieldRestartCommandLabel: 'Neustart-/Umschaltbefehl',
   fieldRestartCommandHint:

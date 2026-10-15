@@ -67,7 +67,7 @@ export default {
   fieldPortsLabel: '포트 매핑',
   fieldPortsHint: '이미지 배포: 쉼표 / 공백 구분, 각 항목이 docker run -p <map> 로 확장',
   fieldRunArgsLabel: 'docker run 인자',
-  fieldRunArgsHint: '이미지 배포: docker run 에 그대로 추가(인자 자유. 자격 증명은 registry 로그인을 사용하고 여기에 쓰지 말 것)',
+  fieldRunArgsHint: '이미지 배포: docker run 에 그대로 추가(공백이 포함된 값은 따옴표로 감싸세요; 환경 범위 변수는 --env-file 로 자동 주입; 자격 증명은 vault 에 보관하고 여기에 쓰지 마세요)',
   fieldStrategyLabel: '배포 전략',
   fieldRestartCommandLabel: '재시작 / 전환 명령',
   fieldRestartCommandHint:

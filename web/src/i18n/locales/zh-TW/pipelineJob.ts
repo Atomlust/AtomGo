@@ -67,7 +67,7 @@ export default {
   fieldPortsLabel: '連接埠對應',
   fieldPortsHint: '映像部署:逗號 / 空白分隔,每項展開為 docker run -p <map>',
   fieldRunArgsLabel: 'docker run 參數',
-  fieldRunArgsHint: '映像部署:原樣追加到 docker run(參數自由;憑證請用 registry 登入,勿寫進此處)',
+  fieldRunArgsHint: '映像部署:原樣追加到 docker run(可用雙/單引號包裹含空格的值;環境作用域變數會自動經 --env-file 注入容器;憑證請走保險庫加密,勿寫進此處)',
   fieldStrategyLabel: '部署策略',
   fieldRestartCommandLabel: '重啟 / 切換命令',
   fieldRestartCommandHint:

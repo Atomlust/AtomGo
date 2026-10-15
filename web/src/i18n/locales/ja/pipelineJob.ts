@@ -67,7 +67,7 @@ export default {
   fieldPortsLabel: 'ポートマッピング',
   fieldPortsHint: 'イメージデプロイ:カンマ / 空白区切り、各項目が docker run -p <map> に展開',
   fieldRunArgsLabel: 'docker run 引数',
-  fieldRunArgsHint: 'イメージデプロイ:docker run にそのまま追記(引数は自由。認証情報は registry ログインを使用、ここに書かない)',
+  fieldRunArgsHint: 'イメージデプロイ:docker run にそのまま追記(空白を含む値は引用符で囲めます;環境スコープの変数は --env-file で自動注入;認証情報は vault に保存し、ここに書かないでください)',
   fieldStrategyLabel: 'デプロイ戦略',
   fieldRestartCommandLabel: '再起動 / 切替コマンド',
   fieldRestartCommandHint:

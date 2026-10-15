@@ -553,7 +553,7 @@ func TestRunDeployJobPassesImageParams(t *testing.T) {
 		"strategy":      "blue_green",
 		"deployPath":    "/opt/app", // 文件态键仍应透传,不互斥
 	}}
-	if err := b.runDeployJob(context.Background(), rep, jb, "run-1", nil); err != nil {
+	if err := b.runDeployJob(context.Background(), rep, jb, &run.Run{ID: "run-1"}); err != nil {
 		t.Fatalf("runDeployJob err: %v", err)
 	}
 	for k, want := range map[string]string{

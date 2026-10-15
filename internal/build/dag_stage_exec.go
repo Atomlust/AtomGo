@@ -299,7 +299,7 @@ func NewStageExecutor(b *Builder, reportSink TestReportSink) dagrun.StageExecuto
 				}
 				_ = rep.JobRunning(ctx, jb.ID)
 				jrep := rep.JobReporter(jb.ID)
-				if err := b.runDeployJob(ctx, jrep, jb, r.ID, r.Trigger.Params); err != nil {
+				if err := b.runDeployJob(ctx, jrep, jb, r); err != nil {
 					_ = rep.JobDone(ctx, jb.ID, run.StepFailed)
 					return err
 				}
@@ -432,7 +432,7 @@ func (b *Builder) runStageJobsDAG(
 			case isBuildImageJob(jb.Type):
 				return b.runBuildImageJobIsolated(ctx, jsink, jrep, r, jb, stage, proj, settings, hasPushJob)
 			case isDeployJob(jb.Type):
-				return b.runDeployJob(ctx, jrep, jb, r.ID, r.Trigger.Params)
+				return b.runDeployJob(ctx, jrep, jb, r)
 			case strings.TrimSpace(jb.Type) == "push_image":
 				// 推送随构建镜像节点完成(hasPushJob);本节点仅用于在 DAG 中编排顺序/展示。
 				_ = jrep.Log(ctx, streamStdout, fmt.Sprintf("· 推送镜像「%s」:已随构建镜像节点完成推送(本节点用于编排顺序)", jb.Name))
@@ -597,7 +597,13 @@ func (b *Builder) runBuildImageJobIsolated(
 
 // runDeployJob 执行一个 deploy_ssh 节点:把本 run 已产出的产物经 SSH 部署到节点配置的目标机
 // (复用 deploy.Service.DeployForStage 中途部署,不动 run 终态)。任一目标失败 → 阶段失败、阻断下游。
-func (b *Builder) runDeployJob(ctx context.Context, rep dagrun.StageReporter, jb pipeline.Job, runID string, params map[string]string) error {
+//
+// 环境作用域变量注入:按本 run 解析出的目标环境(Trigger.ResolvedEnvironment)解析「环境与凭据」
+// 卡片的变量(明文 + 保险库 secret 即时解密),经 ctx 透传部署层 —— 文件型产物落目标机部署目录
+// .env;镜像产物落 /tmp/atomgo/env/<容器名>.env 并经 docker run --env-file 注入容器。
+// secret 解密失败 → 跳过该 key 并在部署日志披露(绝不明文);解析服务异常 → 节点失败(诚实失败,
+// 不静默丢变量)。
+func (b *Builder) runDeployJob(ctx context.Context, rep dagrun.StageReporter, jb pipeline.Job, r *run.Run) error {
 	if b.deployer == nil {
 		run.RecordExecution(rep, run.ExecutionStub)
 		_ = rep.Log(ctx, streamStdout, "· 部署节点:部署服务未注入,跳过")
@@ -611,10 +617,10 @@ func (b *Builder) runDeployJob(ctx context.Context, rep dagrun.StageReporter, jb
 	cfg := map[string]string{}
 	// deployPath / restartCommand 支持 {{param}} 占位:用本次运行参数渲染(命令型部署据此让
 	// 「本地端口 / 穿透端口」等随运行参数变化;非配置类部署不写占位 → renderTemplate 零开销直返)。
-	if dp := renderTemplate(cfgString(jb.Config, "deployPath"), params); dp != "" {
+	if dp := renderTemplate(cfgString(jb.Config, "deployPath"), r.Trigger.Params); dp != "" {
 		cfg["releaseBase"] = dp
 	}
-	if rc := renderTemplate(cfgString(jb.Config, "restartCommand"), params); rc != "" {
+	if rc := renderTemplate(cfgString(jb.Config, "restartCommand"), r.Trigger.Params); rc != "" {
 		cfg["restartCommand"] = rc
 	}
 	// 镜像产物部署参数(#51)透传:deploy.DeployForStage 经这些键挑镜像产物并组装
@@ -633,8 +639,23 @@ func (b *Builder) runDeployJob(ctx context.Context, rep dagrun.StageReporter, jb
 	_ = rep.Log(ctx, streamStdout, fmt.Sprintf("→ SSH 部署本次产物到服务器 %s(策略 %s)…", serverID, stratLabel))
 	// 把目标机真实执行的命令 + stdout/stderr 实时回流到本部署步骤日志(脱敏由 sink 侧 Masker 兜底)。
 	dctx := deploy.WithCmdLog(ctx, func(stream, text string) { _ = rep.Log(ctx, stream, text) })
+	// 环境作用域变量解析 + 挂载(见函数注释):镜像产物最终以 --env-file 注入容器。
+	if envName := strings.TrimSpace(r.Trigger.ResolvedEnvironment); envName != "" {
+		vars, unresolved, rerr := b.resolveEnvVars(ctx, r.ProjectID, envName)
+		if rerr != nil {
+			_ = rep.Log(ctx, streamStderr, fmt.Sprintf("环境「%s」变量解析失败:%s", envName, rerr.Error()))
+			return ErrBuildFailed
+		}
+		if len(unresolved) > 0 {
+			_ = rep.Log(ctx, streamStderr, fmt.Sprintf("· %d 个环境变量未能解密(凭据缺失/保险库未配),已跳过:%s", len(unresolved), strings.Join(unresolved, ", ")))
+		}
+		if len(vars) > 0 {
+			dctx = deploy.WithEnvFile(dctx, vars)
+			_ = rep.Log(ctx, streamStdout, fmt.Sprintf("→ 注入 %d 个环境变量(环境「%s」作用域;文件产物落 .env,镜像产物经 --env-file)", len(vars), envName))
+		}
+	}
 	run.RecordExecution(rep, run.ExecutionReal)
-	results, err := b.deployer.DeployForStage(dctx, runID, []string{serverID}, cfg, strategy)
+	results, err := b.deployer.DeployForStage(dctx, r.ID, []string{serverID}, cfg, strategy)
 	if err != nil {
 		_ = rep.Log(ctx, streamStderr, "部署失败:"+err.Error())
 		return ErrBuildFailed

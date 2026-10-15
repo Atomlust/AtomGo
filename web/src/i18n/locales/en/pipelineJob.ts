@@ -67,7 +67,7 @@ export default {
   fieldPortsLabel: 'Port mapping',
   fieldPortsHint: 'Image deploy: comma / whitespace separated, each expands to docker run -p <map>',
   fieldRunArgsLabel: 'docker run args',
-  fieldRunArgsHint: 'Image deploy: appended verbatim to docker run (any args; for credentials use registry login, don’t put them here)',
+  fieldRunArgsHint: 'Image deploy: appended verbatim to docker run (wrap values containing spaces in quotes; environment-scoped vars are auto-injected via --env-file; store credentials in the vault, don’t put them here)',
   fieldStrategyLabel: 'Deploy strategy',
   fieldRestartCommandLabel: 'Restart / switch command',
   fieldRestartCommandHint:

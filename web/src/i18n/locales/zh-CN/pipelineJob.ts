@@ -67,7 +67,7 @@ export default {
   fieldPortsLabel: '端口映射',
   fieldPortsHint: '镜像部署:逗号 / 空白分隔,每项展开为 docker run -p <map>',
   fieldRunArgsLabel: 'docker run 参数',
-  fieldRunArgsHint: '镜像部署:原样追加到 docker run(参数自由;凭据请用 registry 登录,勿写进此处)',
+  fieldRunArgsHint: '镜像部署:原样追加到 docker run(可用双/单引号包裹含空格的值;环境作用域变量自动经 --env-file 注入容器;凭据请走保险库加密,勿写进此处)',
   fieldStrategyLabel: '部署策略',
   fieldRestartCommandLabel: '重启 / 切换命令',
   fieldRestartCommandHint:

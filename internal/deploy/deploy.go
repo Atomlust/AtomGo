@@ -68,8 +68,9 @@ type DeployInput struct {
 	// 晋升 run,而不覆盖源 run 的部署记录。
 	RecordRunID string
 	// EnvFile 是可选的「要注入目标机的环境变量」(已解析明文 K=V)。非空 → 逐机把变量写入
-	// 部署根目录的 .env(文件型产物)。供晋级部署注入目标环境作用域变量(明文 + 保险库解密)。
-	// 非文件型(image)产物忽略。绝不回 HTTP / 日志(明文)。
+	// 目标机:文件型产物落部署根目录的 .env;镜像产物落 /tmp/atomgo/env/<容器名>.env 并经
+	// docker run --env-file 注入。供晋级部署 / dag 部署节点注入目标环境作用域变量
+	// (明文 + 保险库解密)。绝不回 HTTP / 日志(明文)。
 	EnvFile map[string]string
 	// Config 是可选部署参数(如目标路径);本期最小消费(dist 用 Path 决定部署目录)。
 	Config map[string]string
@@ -680,8 +681,9 @@ func (s *service) deployOne(ctx context.Context, srv *target.Server, a run.Artif
 		StartedAt:  started,
 	}
 
-	// 环境变量注入(晋级部署):把目标环境作用域 .env 写入目标机部署根目录。仅文件型产物支持
-	// (release / 基础部署目录);image 走容器,不在此落 .env(其环境变量经 docker run --env-file 另行处理)。
+	// 环境变量注入(文件型产物):把目标环境作用域 .env 写入目标机部署根目录,应用可就近读取。
+	// image 产物不在此落 .env——其环境变量由 stageImageOne 写到 /tmp/atomgo/env/<容器名>.env,
+	// 并经 docker run --env-file 注入(见 image_release.go)。
 	if env := envFileFromCtx(ctx); len(env) > 0 && a.Type != run.ArtifactImage {
 		if msg, ok := s.writeEnvFile(ctx, srv.ID, deployEnvDir(a, cfg), env); !ok {
 			return finishFailed(res, "环境变量写入失败:"+msg)
