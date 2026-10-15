@@ -13,12 +13,12 @@ import (
 // TestBuildEnvFileContent 验证 .env 渲染:按 key 升序、空值与特殊字符双引号转义。
 func TestBuildEnvFileContent(t *testing.T) {
 	got := buildEnvFileContent(map[string]string{
-		"EMPTY":   "",
-		"PLAIN":   "hello",
-		"SPACED":  "a b c",
-		"HASH":    "x#y",
-		"QUOTED":  `he"llo`,
-		"BACKSL":  `a\b`,
+		"EMPTY":       "",
+		"PLAIN":       "hello",
+		"SPACED":      "a b c",
+		"HASH":        "x#y",
+		"QUOTED":      `he"llo`,
+		"BACKSL":      `a\b`,
 		"WITH_DOLLAR": "$VAR",
 	})
 	want := "BACKSL=\"a\\\\b\"\n" +

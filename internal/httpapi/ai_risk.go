@@ -5,11 +5,11 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/atomlust/atomgo/internal/ai"
 	"github.com/atomlust/atomgo/internal/mask"
 	"github.com/atomlust/atomgo/internal/pipeline"
 	"github.com/atomlust/atomgo/internal/project"
+	"github.com/go-chi/chi/v5"
 )
 
 // ai_risk.go 是「AI 脚本风险标注」HTTP 层(护城河 · AI moat)。

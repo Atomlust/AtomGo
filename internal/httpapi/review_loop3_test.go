@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/atomlust/atomgo/internal/opschat"
 	"github.com/atomlust/atomgo/internal/vault"
+	"github.com/google/uuid"
 )
 
 // Exercise SSE directly through the handler, without opening any network socket.

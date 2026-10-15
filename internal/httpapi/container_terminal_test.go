@@ -12,12 +12,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/coder/websocket"
 	"github.com/atomlust/atomgo/internal/audit"
 	"github.com/atomlust/atomgo/internal/auth"
 	"github.com/atomlust/atomgo/internal/mask"
 	"github.com/atomlust/atomgo/internal/target"
 	"github.com/atomlust/atomgo/internal/vault"
+	"github.com/coder/websocket"
 )
 
 // --- 纯函数:容器目标校验(AC-SEC-02 要害) ---

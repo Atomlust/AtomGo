@@ -22,9 +22,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/atomlust/atomgo/internal/dag"
 	"github.com/atomlust/atomgo/internal/store"
+	"github.com/google/uuid"
 	yaml "gopkg.in/yaml.v3"
 )
 

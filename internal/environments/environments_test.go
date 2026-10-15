@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/atomlust/atomgo/internal/store"
+	"github.com/google/uuid"
 )
 
 // ---- 测试地基:真 SQLite store + 种子项目/运行/部署目标/产物 -----------------

@@ -11,13 +11,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/atomlust/atomgo/internal/ai"
 	"github.com/atomlust/atomgo/internal/auth"
-	"github.com/atomlust/atomgo/internal/storetest"
 	"github.com/atomlust/atomgo/internal/project"
 	"github.com/atomlust/atomgo/internal/run"
+	"github.com/atomlust/atomgo/internal/storetest"
 	"github.com/atomlust/atomgo/internal/vault"
+	"github.com/google/uuid"
 )
 
 // makeTwoCommitRepo 建一个含两次提交的裸仓库(file:// 可克隆),返回 URL + [baselineSha, currentSha]。
@@ -78,7 +78,7 @@ func seedDiffProject(t *testing.T, db *sql.DB, repoURL string) string {
 	credID := uuid.NewString()
 	if _, err := db.Exec(
 		`INSERT INTO credentials (id, name, type, scope, ciphertext, masked_value, created_at, updated_at)
-		 VALUES (?, 'c', 'git_token', '', ` + storetest.BlobHex(storetest.Dialect(), "00") + `, 'm', ?, ?)`,
+		 VALUES (?, 'c', 'git_token', '', `+storetest.BlobHex(storetest.Dialect(), "00")+`, 'm', ?, ?)`,
 		credID, now, now,
 	); err != nil {
 		t.Fatalf("seed credential: %v", err)

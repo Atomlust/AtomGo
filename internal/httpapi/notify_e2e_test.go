@@ -79,7 +79,7 @@ func TestNotifyHookEndToEndWebhook(t *testing.T) {
 	now := time.Now().UTC().Format(time.RFC3339)
 	if _, err := st.DB.Exec(
 		`INSERT INTO credentials (id, name, type, scope, ciphertext, masked_value, created_at, updated_at)
-		 VALUES (?, 'c', 'git_token', '', ` + storetest.BlobHex(storetest.Dialect(), "00") + `, 'm', ?, ?)`,
+		 VALUES (?, 'c', 'git_token', '', `+storetest.BlobHex(storetest.Dialect(), "00")+`, 'm', ?, ?)`,
 		credID, now, now,
 	); err != nil {
 		t.Fatalf("seed credential: %v", err)
@@ -217,7 +217,7 @@ func TestNotifyHookProjectOverrideEndToEnd(t *testing.T) {
 	now := time.Now().UTC().Format(time.RFC3339)
 	if _, err := st.DB.Exec(
 		`INSERT INTO credentials (id, name, type, scope, ciphertext, masked_value, created_at, updated_at)
-		 VALUES (?, 'c', 'git_token', '', ` + storetest.BlobHex(storetest.Dialect(), "00") + `, 'm', ?, ?)`,
+		 VALUES (?, 'c', 'git_token', '', `+storetest.BlobHex(storetest.Dialect(), "00")+`, 'm', ?, ?)`,
 		credID, now, now,
 	); err != nil {
 		t.Fatalf("seed credential: %v", err)

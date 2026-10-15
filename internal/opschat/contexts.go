@@ -5,8 +5,8 @@ import (
 	"database/sql"
 	"strings"
 
-	"github.com/google/uuid"
 	"github.com/atomlust/atomgo/internal/store"
+	"github.com/google/uuid"
 )
 
 func (s *Service) validateContext(ctx context.Context, key string) error {

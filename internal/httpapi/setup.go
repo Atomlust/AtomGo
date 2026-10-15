@@ -108,13 +108,13 @@ type SetupAdminBootstrapper interface {
 
 // setupService 实现 SetupService。
 type setupService struct {
-	auth       SetupAdminBootstrapper
-	vlt        vault.Vault
-	settings   *settings.Service
-	masterKeyF string // master key 落盘路径("" = 不落盘,仅进程内)
-	envFile    string // atomgo.env 路径(固化数据库配置用;"" 表示不持久化)
+	auth        SetupAdminBootstrapper
+	vlt         vault.Vault
+	settings    *settings.Service
+	masterKeyF  string // master key 落盘路径("" = 不落盘,仅进程内)
+	envFile     string // atomgo.env 路径(固化数据库配置用;"" 表示不持久化)
 	selfRestart func() // 数据库固化后触发进程自重启(如为 nil 则不重启,仅返回 RestartRequired)
-	secret     []byte // 进程级随机 secret(token = HMAC(secret, "setup"))
+	secret      []byte // 进程级随机 secret(token = HMAC(secret, "setup"))
 }
 
 // NewSetupServiceForWiring 构造向导服务(供 main 装配层调用)。
@@ -406,18 +406,18 @@ func envHasKey(path, key string) bool {
 
 // setupSubmitBody 是 POST /api/setup/submit 的请求体。
 type setupSubmitBody struct {
-	Token     string `json:"token"`
-	Username  string `json:"username"`
-	Password  string `json:"password"`
-	MasterKey string `json:"masterKey"`
-	PublicURL string `json:"publicUrl"`
-	DBDriver  string `json:"dbDriver"`
-	DBHost    string `json:"dbHost"`
-	DBPort    string `json:"dbPort"`
-	DBUser    string `json:"dbUser"`
+	Token      string `json:"token"`
+	Username   string `json:"username"`
+	Password   string `json:"password"`
+	MasterKey  string `json:"masterKey"`
+	PublicURL  string `json:"publicUrl"`
+	DBDriver   string `json:"dbDriver"`
+	DBHost     string `json:"dbHost"`
+	DBPort     string `json:"dbPort"`
+	DBUser     string `json:"dbUser"`
 	DBPassword string `json:"dbPassword"`
-	DBName    string `json:"dbName"`
-	DBDSN     string `json:"dbDSN"`
+	DBName     string `json:"dbName"`
+	DBDSN      string `json:"dbDSN"`
 }
 
 // makeSetupStatusHandler: GET /api/setup/status(公开;setup 期间下发一次性 token)。

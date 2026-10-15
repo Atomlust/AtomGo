@@ -6,10 +6,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/atomlust/atomgo/internal/audit"
 	"github.com/atomlust/atomgo/internal/library"
 	"github.com/atomlust/atomgo/internal/pipeline"
+	"github.com/go-chi/chi/v5"
 )
 
 // templates.go 暴露流水线模板端点(FR-8-13 复用基座 · 对标 Jenkins Shared Library / 云效模板)。

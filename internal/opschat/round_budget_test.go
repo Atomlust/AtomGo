@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/atomlust/atomgo/internal/target"
+	"github.com/google/uuid"
 )
 
 func TestFullRoundEscapedOutputFitsReservedCipherStorage(t *testing.T) {

@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/atomlust/atomgo/internal/pipeline"
 	"github.com/atomlust/atomgo/internal/pipelineyaml"
+	"github.com/go-chi/chi/v5"
 )
 
 // pipelineDTO 是流水线配置对外响应体(冻结契约;camelCase)。外层形状定死,

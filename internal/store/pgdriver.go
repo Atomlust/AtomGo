@@ -112,7 +112,7 @@ func namedValuesToValues(args []driver.NamedValue) []driver.Value {
 // rewriteQuestionMarks 把 SQL 文本中的 `?` 占位符顺序改写为 `1、$2、...。
 //
 // 扫描时跳过四类区域,确保其中的 `?` 原样保留:
-//   - 单引号字符串 '…'(含 '' 转义)
+//   - 单引号字符串 '…'(含 ” 转义)
 //   - 双引号标识符 "…"
 //   - 行注释 -- …(至行尾)
 //   - 块注释 /* … */

@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/atomlust/atomgo/internal/mask"
 	"github.com/atomlust/atomgo/internal/target"
+	"github.com/google/uuid"
 )
 
 type registeringModel struct {

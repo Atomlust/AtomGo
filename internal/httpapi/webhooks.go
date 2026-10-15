@@ -8,10 +8,10 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/atomlust/atomgo/internal/audit"
 	"github.com/atomlust/atomgo/internal/run"
 	"github.com/atomlust/atomgo/internal/trigger"
+	"github.com/go-chi/chi/v5"
 )
 
 // webhookMaxBody 限制 webhook 投递体大小(防超大 body 拖垮内存)。

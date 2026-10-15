@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/atomlust/atomgo/internal/pipeline"
 	"github.com/atomlust/atomgo/internal/store"
+	"github.com/google/uuid"
 )
 
 // Store 持久化晋级记录(run_promotions)。环境链与逐环境变量不再独立存储,

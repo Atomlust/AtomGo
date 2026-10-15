@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/atomlust/atomgo/internal/mask"
+	"github.com/google/uuid"
 )
 
 // defaultConcurrency 是 worker pool 默认并发上限(有界;NFR-4 内存约束)。

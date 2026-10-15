@@ -19,8 +19,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-sql-driver/mysql"
 	"github.com/atomlust/atomgo/internal/store"
+	"github.com/go-sql-driver/mysql"
 )
 
 var schemaSeq atomic.Int64

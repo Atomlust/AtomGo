@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/atomlust/atomgo/internal/audit"
 	"github.com/atomlust/atomgo/internal/target"
+	"github.com/google/uuid"
 )
 
 const leaseDuration = 15 * time.Second

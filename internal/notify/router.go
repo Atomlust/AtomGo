@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/atomlust/atomgo/internal/i18n"
+	"github.com/google/uuid"
 )
 
 // 通知事件枚举(冻结契约;DB 存小写串;JSON 同名)。run 终态 → 事件由 main 装配的 NotifyHook

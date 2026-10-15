@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/atomlust/atomgo/internal/target"
+	"github.com/google/uuid"
 )
 
 // Seed committed work without starting a worker, as after Submit's transaction.

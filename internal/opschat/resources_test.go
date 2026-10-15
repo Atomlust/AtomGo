@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/atomlust/atomgo/internal/target"
+	"github.com/google/uuid"
 )
 
 const validDF = "Filesystem 1024-blocks Used Available Capacity Mounted on\n/dev/vda1 1048576 262144 720896 27% /\ntmpfs 1024 0 1024 0% /run\n"

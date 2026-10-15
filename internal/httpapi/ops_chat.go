@@ -12,9 +12,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/atomlust/atomgo/internal/auth"
 	"github.com/atomlust/atomgo/internal/opschat"
+	"github.com/go-chi/chi/v5"
 )
 
 func WithOpsChat(s *opschat.Service) Option { return func(o *options) { o.opsChat = s } }

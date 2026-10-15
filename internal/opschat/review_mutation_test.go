@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/atomlust/atomgo/internal/target"
+	"github.com/google/uuid"
 )
 
 func TestApprovalRecheckedAfterWaitingForSSHSlot(t *testing.T) {

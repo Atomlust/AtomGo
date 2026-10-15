@@ -30,8 +30,8 @@ func init() {
 
 		// Titles / misc.
 		"AtomGo 通知": {"zh-TW": "AtomGo 通知", "en": "AtomGo notification", "ja": "AtomGo 通知", "ko": "AtomGo 알림", "es": "Notificación de AtomGo", "fr": "Notification AtomGo", "de": "AtomGo-Benachrichtigung"},
-		"(空通知)":         {"zh-TW": "(空通知)", "en": "(empty notification)", "ja": "(空の通知)", "ko": "(빈 알림)", "es": "(notificación vacía)", "fr": "(notification vide)", "de": "(leere Benachrichtigung)"},
-		"测试通知已发送":       {"zh-TW": "測試通知已發送", "en": "Test notification sent", "ja": "テスト通知を送信しました", "ko": "테스트 알림을 보냈습니다", "es": "Notificación de prueba enviada", "fr": "Notification de test envoyée", "de": "Testbenachrichtigung gesendet"},
+		"(空通知)":     {"zh-TW": "(空通知)", "en": "(empty notification)", "ja": "(空の通知)", "ko": "(빈 알림)", "es": "(notificación vacía)", "fr": "(notification vide)", "de": "(leere Benachrichtigung)"},
+		"测试通知已发送":   {"zh-TW": "測試通知已發送", "en": "Test notification sent", "ja": "テスト通知を送信しました", "ko": "테스트 알림을 보냈습니다", "es": "Notificación de prueba enviada", "fr": "Notification de test envoyée", "de": "Testbenachrichtigung gesendet"},
 		"通知语言非法:须为受支持的语言代码": {"zh-TW": "通知語言非法:須為受支持的語言代碼", "en": "Invalid notification language: must be a supported language code", "ja": "通知言語が不正です:サポートされている言語コードである必要があります", "ko": "알림 언어가 잘못되었습니다: 지원되는 언어 코드여야 합니다", "es": "Idioma de notificación no válido: debe ser un código de idioma admitido", "fr": "Langue de notification non valide : doit être un code de langue pris en charge", "de": "Ungültige Benachrichtigungssprache: muss ein unterstützter Sprachcode sein"},
 	})
 }

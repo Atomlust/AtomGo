@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/atomlust/atomgo/internal/audit"
 	"github.com/atomlust/atomgo/internal/auth"
+	"github.com/go-chi/chi/v5"
 )
 
 // accountService 是账户设置 handler 依赖的窄接口(改口令 / 会话列表 / 撤销)。

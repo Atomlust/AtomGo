@@ -6,10 +6,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/atomlust/atomgo/internal/ai"
 	"github.com/atomlust/atomgo/internal/mask"
 	"github.com/atomlust/atomgo/internal/target"
+	"github.com/go-chi/chi/v5"
 )
 
 // 容器 AI 诊断 / 看日志(AI moat)。POST /api/servers/{id}/containers/{containerId}/diagnose。

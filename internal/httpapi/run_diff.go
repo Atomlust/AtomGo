@@ -4,11 +4,11 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/atomlust/atomgo/internal/ai"
 	"github.com/atomlust/atomgo/internal/project"
 	"github.com/atomlust/atomgo/internal/run"
 	"github.com/atomlust/atomgo/internal/vault"
+	"github.com/go-chi/chi/v5"
 )
 
 // ---- 冻结 run-diff 契约(Story 7.3;FR-25;camelCase) -------------------------

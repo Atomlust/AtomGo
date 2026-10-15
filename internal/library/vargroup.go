@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/atomlust/atomgo/internal/pipeline"
 	"github.com/atomlust/atomgo/internal/vault"
+	"github.com/google/uuid"
 )
 
 // 变量组领域错误。错误体不含任何明文 secret。

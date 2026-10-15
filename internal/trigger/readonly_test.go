@@ -16,7 +16,7 @@ func TestResolveExistingEnvNoDefaultsAndFirstMatch(t *testing.T) {
 		t.Fatalf("missing: %s %v", env, err)
 	}
 	const stamp = "2026-10-05T00:00:00Z"
-	if _, err := db.Exec(`INSERT INTO pipeline_triggers (project_id,webhook_token,webhook_secret_ciphertext,branch_mappings_json,created_at,updated_at) VALUES (?, 'token', ` + storetest.BlobHex(storetest.Dialect(), "00") + `, '[{"branchPattern":"main","environment":"first","targetServerIds":["server"]},{"branchPattern":"*","environment":"second"}]', ?, ?)`, id, stamp, stamp); err != nil {
+	if _, err := db.Exec(`INSERT INTO pipeline_triggers (project_id,webhook_token,webhook_secret_ciphertext,branch_mappings_json,created_at,updated_at) VALUES (?, 'token', `+storetest.BlobHex(storetest.Dialect(), "00")+`, '[{"branchPattern":"main","environment":"first","targetServerIds":["server"]},{"branchPattern":"*","environment":"second"}]', ?, ?)`, id, stamp, stamp); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := db.Exec(`PRAGMA query_only=ON`); err != nil {

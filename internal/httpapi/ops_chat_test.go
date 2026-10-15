@@ -15,8 +15,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
 	"github.com/atomlust/atomgo/internal/audit"
 	"github.com/atomlust/atomgo/internal/auth"
 	"github.com/atomlust/atomgo/internal/mask"
@@ -24,6 +22,8 @@ import (
 	"github.com/atomlust/atomgo/internal/storetest"
 	"github.com/atomlust/atomgo/internal/target"
 	"github.com/atomlust/atomgo/internal/vault"
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 )
 
 type opsAuth struct {

@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/atomlust/atomgo/internal/target"
 	"github.com/atomlust/atomgo/internal/vault"
+	"github.com/google/uuid"
 )
 
 // Force a timestamp collision and reverse lexical UUID order after saving the plan.

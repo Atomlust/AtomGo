@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/atomlust/atomgo/internal/i18n"
+	"github.com/google/uuid"
 )
 
 // 模板领域错误。

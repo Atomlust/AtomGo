@@ -9,13 +9,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/atomlust/atomgo/internal/auth"
 	"github.com/atomlust/atomgo/internal/deploy"
 	"github.com/atomlust/atomgo/internal/environments"
 	"github.com/atomlust/atomgo/internal/project"
 	"github.com/atomlust/atomgo/internal/run"
 	"github.com/atomlust/atomgo/internal/vault"
+	"github.com/google/uuid"
 )
 
 // stubDeploy 是一个记录入参的部署服务替身(回滚端点只需 Deploy 被以正确参数调用)。

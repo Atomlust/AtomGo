@@ -16,12 +16,12 @@ import (
 func TestSetupBuildDSN(t *testing.T) {
 	cases := []struct {
 		driver, host, port, user, pass, name, raw, wantContains string
-		wantErr                                      bool
+		wantErr                                                 bool
 	}{
 		{"mysql", "dbhost", "", "u", "p", "atomgo", "", "tcp(dbhost:3306)", false},
 		{"postgres", "dbhost", "5433", "u", "p", "atomgo", "", "dbhost:5433", false},
-		{"mysql", "", "3306", "u", "p", "atomgo", "", "", true}, // 缺主机
-		{"mysql", "h", "", "u", "p", "", "", "", true},          // 缺库名
+		{"mysql", "", "3306", "u", "p", "atomgo", "", "", true},              // 缺主机
+		{"mysql", "h", "", "u", "p", "", "", "", true},                       // 缺库名
 		{"mysql", "h", "", "u", "p", "n", "my-raw-dsn", "my-raw-dsn", false}, // 原始 DSN 优先
 	}
 	for _, c := range cases {

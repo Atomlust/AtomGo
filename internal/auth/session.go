@@ -25,11 +25,11 @@ var ErrSessionNotFound = errors.New("auth: session not found or expired")
 
 // Session 代表一个服务端会话。
 type Session struct {
-	Token     string
-	CSRFToken string
-	Username  string // 登录用户名(多用户);用于反查用户身份与角色。
-	CreatedAt time.Time
-	ExpiresAt time.Time
+	Token      string
+	CSRFToken  string
+	Username   string // 登录用户名(多用户);用于反查用户身份与角色。
+	CreatedAt  time.Time
+	ExpiresAt  time.Time
 	LastSeenAt time.Time
 }
 

@@ -27,12 +27,12 @@ func TestCaddyfileNeedsPlugins(t *testing.T) {
 // TestProxyImageIsStockCaddy 校验「当前镜像是否为官方 stock caddy」的判定(用于早拒提示)。
 func TestProxyImageIsStockCaddy(t *testing.T) {
 	cases := map[string]bool{
-		"myregistry/caddy-l4:2": false, // 含 caddy-l4 等插件的自定义镜像
-		"caddy:2":                             true,  // 官方 stock
-		"caddy":                               true,  // 官方 stock(latest)
-		"caddy:latest":                        true,  // 官方 stock
-		"docker.io/library/caddy:2":           true,  // 官方 stock 全限定
-		"ghcr.io/foo/caddy-with-plugins:2":    false, // 第三方含插件镜像,不应误伤
+		"myregistry/caddy-l4:2":            false, // 含 caddy-l4 等插件的自定义镜像
+		"caddy:2":                          true,  // 官方 stock
+		"caddy":                            true,  // 官方 stock(latest)
+		"caddy:latest":                     true,  // 官方 stock
+		"docker.io/library/caddy:2":        true,  // 官方 stock 全限定
+		"ghcr.io/foo/caddy-with-plugins:2": false, // 第三方含插件镜像,不应误伤
 	}
 	for ref, want := range cases {
 		t.Setenv(caddyImageEnv, ref)

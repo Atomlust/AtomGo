@@ -4,11 +4,11 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/atomlust/atomgo/internal/pipeline"
 	"github.com/atomlust/atomgo/internal/project"
 	"github.com/atomlust/atomgo/internal/trigger"
 	"github.com/atomlust/atomgo/internal/vault"
+	"github.com/go-chi/chi/v5"
 )
 
 // ---- 校验结果 DTO(冻结契约;camelCase;外层 {ready, issues:[{severity,code,scope,field,message}]} 定死) ----

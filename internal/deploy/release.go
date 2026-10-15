@@ -32,9 +32,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/atomlust/atomgo/internal/run"
 	"github.com/atomlust/atomgo/internal/target"
+	"github.com/google/uuid"
 )
 
 // defaultKeepReleases 是未显式配置时保留的旧发布份数(FR-11:默认留上一版本 1 份)。

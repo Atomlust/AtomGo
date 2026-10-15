@@ -7,10 +7,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/atomlust/atomgo/internal/ai"
 	"github.com/atomlust/atomgo/internal/mask"
 	"github.com/atomlust/atomgo/internal/run"
+	"github.com/go-chi/chi/v5"
 )
 
 // ---- 冻结 diagnosis 子 DTO(Story 7.2 定义并冻结;camelCase) ------------------

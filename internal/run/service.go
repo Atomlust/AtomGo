@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/atomlust/atomgo/internal/store"
+	"github.com/google/uuid"
 )
 
 // defaultPageSize 是列表默认页大小;maxPageSize 防滥用。

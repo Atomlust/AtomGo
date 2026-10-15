@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/atomlust/atomgo/internal/target"
+	"github.com/google/uuid"
 )
 
 func TestRetryPartialFailureOnlySpecifiedTargetsAndHistoricalCall(t *testing.T) {

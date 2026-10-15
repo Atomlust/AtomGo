@@ -277,9 +277,9 @@ func TestPromoteDeploysSourceArtifactToTargetEnv(t *testing.T) {
 		t.Fatalf("POST promote = %d: %s", presp.StatusCode, praw)
 	}
 	var body struct {
-		Status              string `json:"status"`
-		DeployRunID         string `json:"deployRunId"`
-		DeploySkipped       string `json:"deploySkipped"`
+		Status              string   `json:"status"`
+		DeployRunID         string   `json:"deployRunId"`
+		DeploySkipped       string   `json:"deploySkipped"`
 		DeployEnvUnresolved []string `json:"deployEnvUnresolved"`
 		DeployTargets       []struct {
 			ServerID string `json:"serverId"`

@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/atomlust/atomgo/internal/artifactstore"
 	"github.com/atomlust/atomgo/internal/run"
+	"github.com/google/uuid"
 )
 
 // seedSuccessRunWithStoredArtifact 像 seedSuccessRunWithArtifact,但产物带制品库句柄 + metadata

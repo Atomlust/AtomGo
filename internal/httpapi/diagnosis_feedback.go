@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/atomlust/atomgo/internal/run"
+	"github.com/go-chi/chi/v5"
 )
 
 // diagnosis_feedback.go 是「诊断反馈闭环」HTTP 层(FR-26 / Story 7.5)。

@@ -16,9 +16,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/atomlust/atomgo/internal/store"
 	"github.com/atomlust/atomgo/internal/vault"
+	"github.com/google/uuid"
 )
 
 // replayWindow 是 webhook 时间戳新鲜度窗口:|now - ts| 超过此值视为重放,拒绝(401)。

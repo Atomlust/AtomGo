@@ -8,10 +8,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/atomlust/atomgo/internal/pipeline"
 	"github.com/atomlust/atomgo/internal/storetest"
 	"github.com/atomlust/atomgo/internal/vault"
+	"github.com/google/uuid"
 )
 
 // testMasterKey 返回确定性测试用 master key。
@@ -35,7 +35,7 @@ func seedProject(t *testing.T, db *sql.DB) string {
 	credID := uuid.NewString()
 	if _, err := db.Exec(
 		`INSERT INTO credentials (id, name, type, scope, ciphertext, masked_value, created_at, updated_at)
-		 VALUES (?, 'c', 'git_token', '', ` + storetest.BlobHex(storetest.Dialect(), "00") + `, 'm', ?, ?)`,
+		 VALUES (?, 'c', 'git_token', '', `+storetest.BlobHex(storetest.Dialect(), "00")+`, 'm', ?, ?)`,
 		credID, now, now,
 	); err != nil {
 		t.Fatalf("seed credential: %v", err)

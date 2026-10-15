@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/atomlust/atomgo/internal/audit"
 	"github.com/atomlust/atomgo/internal/proxy"
 	"github.com/atomlust/atomgo/internal/target"
+	"github.com/go-chi/chi/v5"
 )
 
 // 审计 action / target(自动 HTTPS 反代路由写操作)。复用既有 audit.Recorder;detail 绝无敏感信息。
@@ -31,7 +31,7 @@ const (
 	auditActionProxyServerSettingsSet = "proxy.server_settings.set"
 	// 外接模式「自动注入 import 行」审计(改写用户主 Caddyfile)。detail 仅 serverId + 文件路径,无敏感信息。
 	auditActionProxyExternalImport = "proxy.external_import"
-	auditTargetProxyCaddy         = "proxy_caddy"
+	auditTargetProxyCaddy          = "proxy_caddy"
 )
 
 // proxyRedirectDTO 是单条重定向规则对外响应体(camelCase;冻结契约)。
@@ -391,7 +391,7 @@ type proxyUpdateBody struct {
 			To     string `json:"to"`
 			Status int    `json:"status"`
 		} `json:"redirects"`
-		PathRules     []struct {
+		PathRules []struct {
 			Path              string `json:"path"`
 			UpstreamContainer string `json:"upstreamContainer"`
 			UpstreamPort      int    `json:"upstreamPort"`
@@ -461,8 +461,8 @@ func makeUpdateProxyRouteHandler(svc proxy.Service, rec audit.Recorder) http.Han
 				BasicAuthUser:   in.Config.BasicAuthUser,
 				IPAllow:         in.Config.IPAllow,
 				IPDeny:          in.Config.IPDeny,
-			Redirects:       reds,
-			PathRules:       prs,
+				Redirects:       reds,
+				PathRules:       prs,
 				Upstreams:       ups,
 				LBPolicy:        in.Config.LBPolicy,
 				HealthURI:       in.Config.HealthURI,
@@ -581,6 +581,7 @@ func makeProxyModeHandler() http.HandlerFunc {
 		})
 	}
 }
+
 // makeProxyCaddyPrepareHandler 返回 POST /api/proxy/caddy?serverId=<id>(认证 + CSRF + 审计)→ CaddyStatus DTO。
 // 显式部署反代环境(atomgo-caddy 容器)而无需先绑域名;外接模式则校验主 Caddyfile 的 import。80/443 冲突等人话错误透出。serverId 为空 → 400。
 func makeProxyCaddyPrepareHandler(svc proxy.Service, rec audit.Recorder) http.HandlerFunc {

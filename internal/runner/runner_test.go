@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/atomlust/atomgo/internal/store"
 	"github.com/atomlust/atomgo/internal/storetest"
+	"github.com/google/uuid"
 )
 
 type fakeExister struct{ ids map[string]bool }
@@ -22,7 +22,7 @@ func seedProject(t *testing.T, st *store.Store) string {
 	t.Helper()
 	now := time.Now().UTC().Format(time.RFC3339)
 	credID := uuid.NewString()
-	if _, err := st.DB.Exec(`INSERT INTO credentials (id,name,type,scope,ciphertext,masked_value,created_at,updated_at) VALUES (?,'c','git_token','',` + storetest.BlobHex(storetest.Dialect(), "00") + `,'m',?,?)`, credID, now, now); err != nil {
+	if _, err := st.DB.Exec(`INSERT INTO credentials (id,name,type,scope,ciphertext,masked_value,created_at,updated_at) VALUES (?,'c','git_token','',`+storetest.BlobHex(storetest.Dialect(), "00")+`,'m',?,?)`, credID, now, now); err != nil {
 		t.Fatalf("seed cred: %v", err)
 	}
 	projID := uuid.NewString()

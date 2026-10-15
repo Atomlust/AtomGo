@@ -5,9 +5,9 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/atomlust/atomgo/internal/audit"
 	"github.com/atomlust/atomgo/internal/trigger"
+	"github.com/go-chi/chi/v5"
 )
 
 // webhookURLPrefix 是 webhook 接收端点路径前缀(冻结契约:/api/webhooks/<token>)。

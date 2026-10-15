@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/atomlust/atomgo/internal/store"
+	"github.com/google/uuid"
 )
 
 // feedback.go 是「诊断反馈闭环」领域层(FR-26 / Story 7.5)。

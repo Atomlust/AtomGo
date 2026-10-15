@@ -62,56 +62,56 @@ const contextKeySession contextKey = 1
 type Option func(*options)
 
 type options struct {
-	opsChat          *opschat.Service
-	onboarding       onboardingStatusReader
-	vault            vault.Vault
-	projects         project.Service
-	triggers         trigger.Service
-	cron             cron.Service
-	chain            chain.Service
-	concurrency      run.ConcurrencyService
-	parameters       run.ParameterService
-	pipelines        pipeline.Service
-	pipelineSettings pipeline.SettingsService
-	runs             run.Service
-	runSub           runSubscriber
-	feedback         run.FeedbackService
-	secretSource     *RunSecretSource
-	receiver         *trigger.Receiver
-	audit            audit.Recorder
-	account          accountService
-	users            userManagementService
-	aiSettings       ai.Service
-	aiAnalyzer       ai.RepoAnalyzer
-	runDiffer        ai.RunDiffer
-	sourceReader     SourceReader
-	refsLister       RefsLister
-	runnerConfig     runner.Service
-	servers          target.Service
-	notifications    notify.Service
+	opsChat           *opschat.Service
+	onboarding        onboardingStatusReader
+	vault             vault.Vault
+	projects          project.Service
+	triggers          trigger.Service
+	cron              cron.Service
+	chain             chain.Service
+	concurrency       run.ConcurrencyService
+	parameters        run.ParameterService
+	pipelines         pipeline.Service
+	pipelineSettings  pipeline.SettingsService
+	runs              run.Service
+	runSub            runSubscriber
+	feedback          run.FeedbackService
+	secretSource      *RunSecretSource
+	receiver          *trigger.Receiver
+	audit             audit.Recorder
+	account           accountService
+	users             userManagementService
+	aiSettings        ai.Service
+	aiAnalyzer        ai.RepoAnalyzer
+	runDiffer         ai.RunDiffer
+	sourceReader      SourceReader
+	refsLister        RefsLister
+	runnerConfig      runner.Service
+	servers           target.Service
+	notifications     notify.Service
 	oauthPublicOrigin string
-	deployer         deploy.Service
-	anomaly          anomaly.Service
-	anomalyInterval  int // 后台定时检测间隔(秒);0=已关闭。供前端显示节奏。
-	anomalyCooldown  int // 同条件告警去重冷却窗口(秒)。
-	metricsHistory   metrics.Service
-	oauth            oauth.Service
-	approvalCoord    *approval.Coordinator
-	approvalStore    *approval.Store
-	approvalSigner   *approval.Signer
-	promotionStore   *promotion.Store
-	imageMirror      imageMirrorFunc
-	environments     *environments.Service
-	doraMetrics      run.MetricsService
-	templates        library.TemplateService
-	varGroups        library.VarGroupService
-	customNodes      library.CustomNodeService
-	artifactStore    *artifactstore.Store
-	retention        *retention.Service
-	proxy            proxy.Service
-	setup            SetupService
-	liveCache        *livecache.Service
-	settingsSvc      *settings.Service
+	deployer          deploy.Service
+	anomaly           anomaly.Service
+	anomalyInterval   int // 后台定时检测间隔(秒);0=已关闭。供前端显示节奏。
+	anomalyCooldown   int // 同条件告警去重冷却窗口(秒)。
+	metricsHistory    metrics.Service
+	oauth             oauth.Service
+	approvalCoord     *approval.Coordinator
+	approvalStore     *approval.Store
+	approvalSigner    *approval.Signer
+	promotionStore    *promotion.Store
+	imageMirror       imageMirrorFunc
+	environments      *environments.Service
+	doraMetrics       run.MetricsService
+	templates         library.TemplateService
+	varGroups         library.VarGroupService
+	customNodes       library.CustomNodeService
+	artifactStore     *artifactstore.Store
+	retention         *retention.Service
+	proxy             proxy.Service
+	setup             SetupService
+	liveCache         *livecache.Service
+	settingsSvc       *settings.Service
 }
 
 // WithArtifactStore 注入制品库(Story 8-16):挂载产物下载端点

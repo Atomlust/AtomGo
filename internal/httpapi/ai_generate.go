@@ -8,13 +8,13 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/atomlust/atomgo/internal/ai"
 	"github.com/atomlust/atomgo/internal/library"
 	"github.com/atomlust/atomgo/internal/pipeline"
 	"github.com/atomlust/atomgo/internal/project"
 	"github.com/atomlust/atomgo/internal/trigger"
 	"github.com/atomlust/atomgo/internal/vault"
+	"github.com/go-chi/chi/v5"
 )
 
 // ---- AI 生成 / 应用 DTO(冻结契约;camelCase;绝无明文密钥) ----

@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/atomlust/atomgo/internal/storetest"
+	"github.com/google/uuid"
 )
 
 func testDB(t *testing.T) *sql.DB {
@@ -21,7 +21,7 @@ func seedProject(t *testing.T, db *sql.DB) string {
 	cred := uuid.NewString()
 	if _, err := db.Exec(
 		`INSERT INTO credentials (id, name, type, scope, ciphertext, masked_value, created_at, updated_at)
-		 VALUES (?, 'c', 'git_token', '', ` + storetest.BlobHex(storetest.Dialect(), "00") + `, 'm', ?, ?)`, cred, now, now); err != nil {
+		 VALUES (?, 'c', 'git_token', '', `+storetest.BlobHex(storetest.Dialect(), "00")+`, 'm', ?, ?)`, cred, now, now); err != nil {
 		t.Fatalf("seed cred: %v", err)
 	}
 	pid := uuid.NewString()

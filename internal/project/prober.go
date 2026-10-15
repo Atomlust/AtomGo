@@ -9,8 +9,8 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/transport"
 
-	"github.com/go-git/go-git/v5/storage/memory"
 	"github.com/atomlust/atomgo/internal/gitauth"
+	"github.com/go-git/go-git/v5/storage/memory"
 
 	gogit "github.com/go-git/go-git/v5"
 	gogitconfig "github.com/go-git/go-git/v5/config"

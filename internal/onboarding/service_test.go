@@ -26,7 +26,7 @@ func exec(t *testing.T, db *sql.DB, stmt string, args ...any) {
 }
 func fixture(t *testing.T) (*sql.DB, *Service) {
 	db := storetest.OpenDB(t)
-	exec(t, db, `INSERT INTO credentials (id,name,type,scope,ciphertext,masked_value,created_at,updated_at) VALUES ('cred','secret-name','git_token','',` + storetest.BlobHex(storetest.Dialect(), "00") + `,'SECRET_MASK',?,?)`, stamp, stamp)
+	exec(t, db, `INSERT INTO credentials (id,name,type,scope,ciphertext,masked_value,created_at,updated_at) VALUES ('cred','secret-name','git_token','',`+storetest.BlobHex(storetest.Dialect(), "00")+`,'SECRET_MASK',?,?)`, stamp, stamp)
 	return db, New(db, Capabilities{Runtime: RuntimeAvailable, VaultConfigured: true})
 }
 func project(t *testing.T, db *sql.DB, id, created string) {
@@ -382,7 +382,7 @@ func TestOnlyApplicableImageEnvironment(t *testing.T) {
 			project(t, db, "p", stamp)
 			config(t, db, "p", spec(job("build_image")), true)
 			mapping, _ := json.Marshal([]map[string]any{{"branchPattern": tc.branch, "environment": "prod", "targetServerIds": []string{"deleted-server"}}})
-			exec(t, db, `INSERT INTO pipeline_triggers (project_id,webhook_token,webhook_secret_ciphertext,branch_mappings_json,created_at,updated_at) VALUES ('p','token',` + storetest.BlobHex(storetest.Dialect(), "00") + `,?,?,?)`, string(mapping), stamp, stamp)
+			exec(t, db, `INSERT INTO pipeline_triggers (project_id,webhook_token,webhook_secret_ciphertext,branch_mappings_json,created_at,updated_at) VALUES ('p','token',`+storetest.BlobHex(storetest.Dialect(), "00")+`,?,?,?)`, string(mapping), stamp, stamp)
 			if tc.name != "missing_environment" {
 				st := pipeline.DefaultSettings()
 				st.Environments = []pipeline.Environment{{Name: "prod", EnvVars: []pipeline.BuildVar{{Key: "SECRET_UNUSED", Secret: true, CredentialID: "deleted"}}, ImageRegistry: pipeline.ImageRegistry{Type: "custom", URL: tc.registryURL, CredentialID: tc.credential}}}

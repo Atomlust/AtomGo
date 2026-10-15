@@ -16,9 +16,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/atomlust/atomgo/internal/artifactstore"
 	"github.com/atomlust/atomgo/internal/run"
+	"github.com/google/uuid"
 )
 
 // TestE2EArtifactStoreDistUntar:制品库存 dist 的 tar.gz → 部署 → 容器内远端解包出真文件树。

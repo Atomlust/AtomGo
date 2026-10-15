@@ -31,8 +31,8 @@ import (
 	fdiff "github.com/go-git/go-git/v5/plumbing/format/diff"
 	"github.com/go-git/go-git/v5/plumbing/object"
 
-	"github.com/go-git/go-git/v5/storage/memory"
 	"github.com/atomlust/atomgo/internal/gitauth"
+	"github.com/go-git/go-git/v5/storage/memory"
 )
 
 // diffCloneTimeout 是单次克隆的硬超时(防黑洞 IP / 慢 DNS 把 goroutine 挂死)。

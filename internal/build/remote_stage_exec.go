@@ -89,14 +89,14 @@ func (b *Builder) runStageRemote(ctx context.Context, r *run.Run, stage pipeline
 
 	auth := b.revealGitAuth(proj.CredentialID)
 	resolved, cerr := b.cloner.Clone(ctx, proj.RepoURL, auth.Username, auth.Token, r.Trigger.Branch, r.Trigger.Commit, workspace)
-		auth = vault.GitAuth{}
-		if cerr != nil {
-			if errors.Is(ctx.Err(), context.Canceled) {
-				return run.ErrCanceled
-			}
-			_ = rep.Log(ctx, streamStderr, cerr.Error())
-			return ErrBuildFailed
+	auth = vault.GitAuth{}
+	if cerr != nil {
+		if errors.Is(ctx.Err(), context.Canceled) {
+			return run.ErrCanceled
 		}
+		_ = rep.Log(ctx, streamStderr, cerr.Error())
+		return ErrBuildFailed
+	}
 	if resolved != nil && resolved.CommitShort != "" && b.recordCommit != nil {
 		b.recordCommit(ctx, r.ID, resolved.CommitShort)
 	}

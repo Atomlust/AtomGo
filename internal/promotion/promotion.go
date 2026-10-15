@@ -64,8 +64,8 @@ var (
 
 // EnvStage 是环境链上的一级:环境名 + 是否需要审批门 + 审批人名单。
 type EnvStage struct {
-	Name string `json:"name"`
-	Gated bool `json:"gated"`
+	Name  string `json:"name"`
+	Gated bool   `json:"gated"`
 	// Approvers 是 gated 环境的审批人名单(对齐 GitHub required reviewers /
 	// GitLab Allowed-to-deploy)。为空表示不限定身份(向后兼容)。
 	Approvers []string `json:"approvers,omitempty"`

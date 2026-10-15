@@ -6,11 +6,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/atomlust/atomgo/internal/pipeline"
 	"github.com/atomlust/atomgo/internal/run"
 	"github.com/atomlust/atomgo/internal/target"
 	"github.com/atomlust/atomgo/internal/vault"
+	"github.com/google/uuid"
 )
 
 // ---- 纯函数测试 -------------------------------------------------------------
@@ -18,11 +18,11 @@ import (
 func TestParseRegistryHost(t *testing.T) {
 	cases := map[string]string{
 		"docker.atomlust.com/atomlust/atomupdate:tag": "docker.atomlust.com",
-		"localhost:5000/myimg:tag":                   "localhost:5000",
-		"reg.io:5000/a/b:c":                          "reg.io:5000",
-		"nginx:latest":                               "docker.io",
-		"myorg/app":                                  "docker.io",
-		"https://docker.atomlust.com/x/y:z":          "docker.atomlust.com", // 协议不应残留
+		"localhost:5000/myimg:tag":                    "localhost:5000",
+		"reg.io:5000/a/b:c":                           "reg.io:5000",
+		"nginx:latest":                                "docker.io",
+		"myorg/app":                                   "docker.io",
+		"https://docker.atomlust.com/x/y:z":           "docker.atomlust.com", // 协议不应残留
 	}
 	for ref, want := range cases {
 		if got := parseRegistryHost(ref); got != want {
@@ -34,9 +34,9 @@ func TestParseRegistryHost(t *testing.T) {
 func TestHostOfRegistry(t *testing.T) {
 	cases := map[string]string{
 		"https://docker.atomlust.com": "docker.atomlust.com",
-		"http://reg.io:5000/":        "reg.io:5000",
-		"docker.atomlust.com":        "docker.atomlust.com",
-		"  https://x.io/  ":          "x.io",
+		"http://reg.io:5000/":         "reg.io:5000",
+		"docker.atomlust.com":         "docker.atomlust.com",
+		"  https://x.io/  ":           "x.io",
 	}
 	for in, want := range cases {
 		if got := hostOfRegistry(in); got != want {
@@ -98,8 +98,8 @@ func TestSettingsRegistryResolverResolve(t *testing.T) {
 	_, err = setsvc.Save(context.Background(), projID, pipeline.SettingsInput{
 		Environments: []pipeline.Environment{
 			{
-				ID:           uuid.NewString(),
-				Name:         "prod",
+				ID:            uuid.NewString(),
+				Name:          "prod",
 				ImageRegistry: pipeline.ImageRegistry{Type: "custom", URL: "https://docker.atomlust.com", CredentialID: cred.ID},
 			},
 		},

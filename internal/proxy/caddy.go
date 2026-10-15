@@ -44,7 +44,7 @@ const (
 //   - modeExternal:外接模式。目标机已存在用户自管的官方 Caddy,AtomGo 不接管容器、不占端口,
 //     只把反代片段写入主机目录、并触发用户主 Caddyfile 的 reload(其需 `import` 该片段)。
 const (
-	modeManaged = "managed"
+	modeManaged  = "managed"
 	modeExternal = "external"
 	// proxyModeEnv 选择反代运行模式;非法/空 → managed。
 	proxyModeEnv = "ATOMGO_PROXY_MODE"
@@ -55,7 +55,7 @@ const (
 	// externalReloadCmdEnv 是外接模式下触发 reload 的命令(数组形态,空格分隔);默认 `caddy reload`。
 	externalReloadCmdEnv = "ATOMGO_CADDY_EXTERNAL_RELOAD_CMD"
 	// 默认值(官方 caddy 镜像约定的主配置路径 / 片段目录)。
-	defaultExternalConfigPath = "/etc/caddy/Caddyfile"
+	defaultExternalConfigPath  = "/etc/caddy/Caddyfile"
 	defaultExternalFragmentDir = "/etc/atomgo-proxy"
 	// externalFragmentFile 是 AtomGo 在外接模式写出的反代片段文件名(主 Caddyfile 应 import 它)。
 	externalFragmentFile = "routes.caddy"

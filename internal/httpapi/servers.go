@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/atomlust/atomgo/internal/target"
+	"github.com/go-chi/chi/v5"
 )
 
 // serverDTO 是服务器对外响应体(冻结契约;camelCase;无明文/无私钥/无口令)。

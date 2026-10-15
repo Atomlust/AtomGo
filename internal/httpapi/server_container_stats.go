@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/atomlust/atomgo/internal/target"
+	"github.com/go-chi/chi/v5"
 )
 
 // 容器实时资源 stats(Portainer 式):一次性采样 `docker stats --no-stream`。经 SSH 跑 docker,

@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/atomlust/atomgo/internal/target"
 	"github.com/atomlust/atomgo/internal/vault"
+	"github.com/google/uuid"
 )
 
 func seedContainerObservation(t *testing.T, s *Service, session string, snapshot target.ConnectionSnapshot, call Call, created time.Time) string {

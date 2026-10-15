@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/atomlust/atomgo/internal/storetest"
+	"github.com/google/uuid"
 )
 
 func mustExec(t *testing.T, db *sql.DB, q string, args ...any) {
@@ -22,7 +22,7 @@ func seedProject(t *testing.T, db *sql.DB) string {
 	now := time.Now().UTC().Format(time.RFC3339)
 	credID := uuid.NewString()
 	mustExec(t, db, `INSERT INTO credentials (id, name, type, scope, ciphertext, masked_value, created_at, updated_at)
-		VALUES (?, 'c', 'git_token', '', ` + storetest.BlobHex(storetest.Dialect(), "00") + `, 'm', ?, ?)`, credID, now, now)
+		VALUES (?, 'c', 'git_token', '', `+storetest.BlobHex(storetest.Dialect(), "00")+`, 'm', ?, ?)`, credID, now, now)
 	projID := uuid.NewString()
 	mustExec(t, db, `INSERT INTO projects (id, name, repo_url, default_branch, credential_id, created_at, updated_at)
 		VALUES (?, 'acme', 'https://example.com/p.git', 'main', ?, ?, ?)`, projID, credID, now, now)

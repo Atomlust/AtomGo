@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/atomlust/atomgo/internal/audit"
 	"github.com/atomlust/atomgo/internal/deploy"
+	"github.com/go-chi/chi/v5"
 )
 
 func batchService(w http.ResponseWriter, svc deploy.Service) deploy.BatchService {

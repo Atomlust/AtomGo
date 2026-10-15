@@ -5,9 +5,9 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/atomlust/atomgo/internal/audit"
 	"github.com/atomlust/atomgo/internal/auth"
+	"github.com/go-chi/chi/v5"
 )
 
 // userManagementService 是用户管理 handler 依赖的窄接口(由 *auth.Service 实现)。

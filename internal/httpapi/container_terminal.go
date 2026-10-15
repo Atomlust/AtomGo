@@ -10,11 +10,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/coder/websocket"
-	"github.com/go-chi/chi/v5"
 	"github.com/atomlust/atomgo/internal/audit"
 	"github.com/atomlust/atomgo/internal/i18n"
 	"github.com/atomlust/atomgo/internal/target"
+	"github.com/coder/websocket"
+	"github.com/go-chi/chi/v5"
 )
 
 // Story 6.4(FR-18):容器内交互终端(WS ↔ SSH → `docker exec -it`)。
