@@ -11,12 +11,12 @@ import (
 
 // 构建期可注入变量。注入路径:
 //
-//	github.com/atomlust/atomgo/internal/version.Version=v1.1.0
+//	github.com/atomlust/atomgo/internal/version.Version=v1.1.1
 //	github.com/atomlust/atomgo/internal/version.Commit=<git sha>
 //	github.com/atomlust/atomgo/internal/version.Date=<RFC3339>
 var (
-	// Version 是语义化版本(发版 tag,如 v1.1.0);未注入构建时取默认值 "v1.1.0"。
-	Version = "v1.1.0"
+	// Version 是语义化版本(发版 tag,如 v1.1.1);未注入构建时取默认值 "v1.1.1"。
+	Version = "v1.1.1"
 	// Commit 是构建所基于的 git 短/全 SHA;未注入为 "none"。
 	Commit = "none"
 	// Date 是构建时间(RFC3339);未注入为 "unknown"。
