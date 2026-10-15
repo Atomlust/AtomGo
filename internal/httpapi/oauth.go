@@ -122,8 +122,10 @@ func makeSaveOAuthAppHandler(svc oauth.Service) http.HandlerFunc {
 }
 
 // vaultCreator 抽象 OAuth 把 token 存成 git_token 凭据所需的 vault 能力(便于测试)。
+// 用 UpsertByName 而非 Create:同名凭据就地刷新,避免每次同步新建一行导致项目绑定到旧 id 拿不到新 token。
 type vaultCreator interface {
 	Create(in vault.CreateInput) (*vault.Credential, error)
+	UpsertByName(in vault.CreateInput) (*vault.Credential, error)
 }
 
 // makeOAuthAuthorizeHandler 返回 GET /api/oauth/{provider}/authorize handler(认证)。
@@ -198,7 +200,8 @@ func makeOAuthCallbackHandler(svc oauth.Service, v vaultCreator, publicOrigin st
 			return
 		}
 		// 把 access_token 存成 git_token 凭据(name = {provider}:{login})。token 绝不回显/日志。
-		_, cerr := v.Create(vault.CreateInput{
+		// 用 UpsertByName:同名凭据就地刷新,确保项目绑定行拿到最新 token(无需重绑)。
+		_, cerr := v.UpsertByName(vault.CreateInput{
 			Name:   provider + ":" + res.Login,
 			Type:   vault.TypeGitToken,
 			Scope:  "global",

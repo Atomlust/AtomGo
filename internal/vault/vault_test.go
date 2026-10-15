@@ -124,6 +124,55 @@ func TestCreateGetRoundTrip(t *testing.T) {
 	}
 }
 
+// TestUpsertByNameConsolidates 验证 OAuth 同步合并:两次同名 UpsertByName 只留一条凭据,
+// 明文随之刷新;被项目绑定的那条就地刷新(不新增、不误删)。
+func TestUpsertByNameConsolidates(t *testing.T) {
+	db := testDB(t)
+	v := New(db, testKey())
+
+	// 第一次同步:插入新凭据。
+	c1, err := v.UpsertByName(CreateInput{Name: "gitee:alice", Type: TypeGitToken, Scope: "global", Secret: "tok-v1"})
+	if err != nil {
+		t.Fatalf("upsert1: %v", err)
+	}
+	// 第二次同步(同名、不同 token):应就地刷新同一条,不新增。
+	c2, err := v.UpsertByName(CreateInput{Name: "gitee:alice", Type: TypeGitToken, Scope: "global", Secret: "tok-v2"})
+	if err != nil {
+		t.Fatalf("upsert2: %v", err)
+	}
+	if c2.ID != c1.ID {
+		t.Fatalf("同名 upsert 应复用同一 id: got %s want %s", c2.ID, c1.ID)
+	}
+	if got, _ := v.Reveal(c2.ID); got != "tok-v2" {
+		t.Fatalf("凭据明文应更新为 tok-v2: got %q", got)
+	}
+	list, _ := v.List()
+	if len(list) != 1 {
+		t.Fatalf("同名凭据应合并为 1 条,实际 %d 条", len(list))
+	}
+
+	// 把这条凭据绑到项目,再同步一次:应保持同一 id 并刷新,不新增、不误删。
+	if _, err := db.Exec(
+		`INSERT INTO projects (id,name,repo_url,default_branch,credential_id,created_at,updated_at) VALUES (?,?,?,?,?,?,?)`,
+		"pid", "p", "https://gitee.com/alice/r.git", "main", c1.ID, "2026-01-01T00:00:00Z", "2026-01-01T00:00:00Z"); err != nil {
+		t.Fatalf("seed project: %v", err)
+	}
+	c3, err := v.UpsertByName(CreateInput{Name: "gitee:alice", Type: TypeGitToken, Scope: "global", Secret: "tok-v3"})
+	if err != nil {
+		t.Fatalf("upsert3: %v", err)
+	}
+	if c3.ID != c1.ID {
+		t.Fatalf("绑定后 upsert 必须刷新被绑定的同一条: got %s want %s", c3.ID, c1.ID)
+	}
+	if got, _ := v.Reveal(c3.ID); got != "tok-v3" {
+		t.Fatalf("绑定凭据明文应更新为 tok-v3: got %q", got)
+	}
+	var cnt int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM projects WHERE credential_id = ?`, c3.ID).Scan(&cnt); err != nil || cnt != 1 {
+		t.Fatalf("项目应仍绑定该凭据: cnt=%d err=%v", cnt, err)
+	}
+}
+
 // TestValidateType 验证类型枚举校验。
 func TestValidateType(t *testing.T) {
 	v := New(testDB(t), testKey())

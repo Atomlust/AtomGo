@@ -93,6 +93,8 @@ type GitAuth struct {
 type Vault interface {
 	// Create 加密并持久化新凭据,返回掩码视图(不含明文)。
 	Create(in CreateInput) (*Credential, error)
+	// UpsertByName 按 name 合并凭据:同名则刷新既有行(优先被项目绑定的),否则插入;用于 OAuth 同步避免重复建行。
+	UpsertByName(in CreateInput) (*Credential, error)
 	// List 返回所有凭据的掩码视图(无明文/密文)。
 	List() ([]Credential, error)
 	// Get 解密并返回指定凭据的明文,**仅供进程内领域调用**;同时更新 last_used_at。
@@ -225,6 +227,96 @@ func (s *service) Create(in CreateInput) (*Credential, error) {
 		LastUsedAt:  nil,
 		CreatedAt:   now,
 	}, nil
+}
+
+// UpsertByName 按 name 合并 OAuth 同步类凭据:同名凭据只保留一条 ——
+//   - 若其中某条已被项目绑定,则刷新那条绑定行的密文(保证项目拿到最新 token);
+//   - 否则刷新最旧的一条;
+//   - 其余同名孤儿(未被任何项目绑定)删除;
+//   - 完全没有同名则插入新行。
+//
+// 用途:OAuth「授权同步」每次刷新同一凭据,而不是新建一行导致项目绑定到旧 id 拿不到新 token。
+// 之前每次同步都 Create 新行(uuid 不同),项目绑定的固定 id 永远指向首次同步的旧 token →
+// 表现为「明明重新同步了,克隆却仍鉴权被拒」。改走本方法后,项目绑定行就地被刷新,无需重绑。
+//
+// 注意:本方法刻意不进 vault.Vault 大接口(避免连累十几个测试 mock),仅 OAuth 回调经窄接口 vaultCreator 调用。
+func (s *service) UpsertByName(in CreateInput) (*Credential, error) {
+	if !s.Configured() {
+		return nil, ErrVaultUnconfigured
+	}
+	if err := validateType(in.Type); err != nil {
+		return nil, err
+	}
+	if in.Name == "" {
+		return nil, ErrEmptyName
+	}
+	if in.Secret == "" {
+		return nil, ErrEmptySecret
+	}
+	sealed, err := seal(s.currentKey(), []byte(in.Secret))
+	if err != nil {
+		return nil, err
+	}
+	masked := mask(in.Type, in.Secret)
+	nowStr := time.Now().UTC().Format(time.RFC3339)
+	uname := strings.TrimSpace(in.Username)
+
+	// 收集同名凭据 id(按创建时间升序,最旧在前)。
+	rows, qerr := s.db.Query(`SELECT id FROM credentials WHERE name = ? ORDER BY created_at ASC, id ASC`, in.Name)
+	if qerr != nil {
+		return nil, fmt.Errorf("vault: lookup credential by name: %w", qerr)
+	}
+	var ids []string
+	for rows.Next() {
+		var id string
+		if serr := rows.Scan(&id); serr == nil {
+			ids = append(ids, id)
+		}
+	}
+	rows.Close()
+
+	// 优先刷新被项目绑定的同名行;否则刷新最旧的一条。
+	keepID := ""
+	for _, id := range ids {
+		var n int
+		if cerr := s.db.QueryRow(`SELECT COUNT(*) FROM projects WHERE credential_id = ?`, id).Scan(&n); cerr == nil && n > 0 {
+			keepID = id
+			break
+		}
+	}
+	if keepID == "" && len(ids) > 0 {
+		keepID = ids[0]
+	}
+
+	if keepID == "" {
+		id := uuid.NewString()
+		if _, ierr := s.db.Exec(
+			`INSERT INTO credentials (id, name, type, scope, username, ciphertext, masked_value, last_used_at, created_at, updated_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)`,
+			id, in.Name, in.Type, in.Scope, uname, sealed, masked, nowStr, nowStr,
+		); ierr != nil {
+			return nil, fmt.Errorf("vault: insert credential by name: %w", ierr)
+		}
+		return &Credential{ID: id, Name: in.Name, Type: in.Type, Scope: in.Scope, Username: uname, MaskedValue: masked, CreatedAt: time.Now().UTC()}, nil
+	}
+
+	// 刷新 keepID,并删除其余同名孤儿(未被任何项目绑定)。
+	if _, uerr := s.db.Exec(
+		`UPDATE credentials SET ciphertext = ?, masked_value = ?, username = ?, scope = ?, updated_at = ? WHERE id = ?`,
+		sealed, masked, uname, in.Scope, nowStr, keepID,
+	); uerr != nil {
+		return nil, fmt.Errorf("vault: update credential by name: %w", uerr)
+	}
+	for _, id := range ids {
+		if id == keepID {
+			continue
+		}
+		var n int
+		if cerr := s.db.QueryRow(`SELECT COUNT(*) FROM projects WHERE credential_id = ?`, id).Scan(&n); cerr == nil && n == 0 {
+			_, _ = s.db.Exec(`DELETE FROM credentials WHERE id = ?`, id)
+		}
+	}
+	return &Credential{ID: keepID, Name: in.Name, Type: in.Type, Scope: in.Scope, Username: uname, MaskedValue: masked}, nil
 }
 
 func (s *service) List() ([]Credential, error) {
