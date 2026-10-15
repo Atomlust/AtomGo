@@ -177,6 +177,12 @@ func (s *service) stageImageOne(ctx context.Context, srv *target.Server, a run.A
 	// 探测当前同名容器所用镜像(供回滚);无容器 / 读失败 → 空(首次部署,无可回滚)。
 	st.prevImage = s.readContainerImage(execCtx, srv.ID, st.name)
 
+	// 部署前自动登录 registry:若本运行环境绑定了 registry 凭据且主机匹配,自动 docker login
+	// 目标机,消除「目标机未预登录 → pull 报 no basic auth credentials」。
+	if msg, ok := s.loginRegistryForImage(execCtx, srv, a, st.ref); !ok {
+		return st, msg, false
+	}
+
 	// 仅 pull,不动旧容器(零中断预备)。
 	if failMsg, ok := s.runStep(execCtx, srv.ID, [][]string{{"docker", "pull", st.ref}}); !ok {
 		return st, failMsg, false

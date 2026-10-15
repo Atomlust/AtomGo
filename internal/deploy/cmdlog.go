@@ -81,6 +81,8 @@ func displayCmd(cmd []string) string {
 	if len(cmd) >= 3 && cmd[0] == "sh" && cmd[1] == "-c" {
 		return strings.TrimSpace(cmd[2])
 	}
+	// 仅 docker login 子命令才把 -p 的紧跟值打码:避免误伤 docker run -p 8080:80 的端口映射。
+	isDockerLogin := len(cmd) >= 2 && cmd[0] == "docker" && cmd[1] == "login"
 	out := make([]string, len(cmd))
 	for i, tok := range cmd {
 		out[i] = tok
@@ -92,6 +94,10 @@ func displayCmd(cmd []string) string {
 			out[i] = maskAssign(tok)
 		case "--password", "--password-stdin":
 			out[i] = "***"
+		case "-p":
+			if isDockerLogin {
+				out[i] = "***"
+			}
 		}
 	}
 	return strings.Join(out, " ")

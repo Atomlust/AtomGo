@@ -19,7 +19,9 @@ func TestDisplayCmd(t *testing.T) {
 		{"mask -e KV", []string{"docker", "run", "-e", "DB_PASSWORD=s3cr3t", "-p", "8080:8080", "app"}, "docker run -e DB_PASSWORD=*** -p 8080:8080 app"},
 		{"mask --env KV", []string{"docker", "run", "--env", "TOKEN=abc", "app"}, "docker run --env TOKEN=*** app"},
 		{"mask --password value", []string{"docker", "login", "--password", "hunter2", "reg.io"}, "docker login --password *** reg.io"},
-		{"port not masked", []string{"docker", "run", "-p", "443:443", "app"}, "docker run -p 443:443 app"},
+		{"mask -p on docker login", []string{"docker", "login", "-u", "alice", "-p", "hunter2", "reg.io"}, "docker login -u alice -p *** reg.io"},
+		{"port -p not masked on docker run", []string{"docker", "run", "-p", "443:443", "app"}, "docker run -p 443:443 app"},
+		{"port -p not masked even near login word", []string{"docker", "run", "--name", "login", "-p", "443:443", "app"}, "docker run --name login -p 443:443 app"},
 		{"plain join", []string{"tar", "xf", "deployctx.tar"}, "tar xf deployctx.tar"},
 	}
 	for _, c := range cases {

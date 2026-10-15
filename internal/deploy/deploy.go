@@ -160,6 +160,9 @@ type service struct {
 	// 目标机;nil 或产物非归档 → 旧占位路径(向后兼容)。由 main 注入(WithArtifactStore)。
 	artStore *artifactstore.Store
 	batchDB  *sql.DB
+	// registryResolver 解析部署前自动 docker login 目标机所需的 registry 凭据(方案 C)。
+	// 为 nil → 跳过自动登录,沿用目标机既有登录(向后兼容;现有测试即此路径)。
+	registryResolver RegistryCredentialResolver
 }
 
 // Option 配置 deploy.Service(如注入诊断钩子)。
@@ -181,6 +184,12 @@ func WithArtifactStore(st *artifactstore.Store) Option {
 }
 
 func WithBatchDB(db *sql.DB) Option { return func(s *service) { s.batchDB = db } }
+
+// WithRegistryResolver 注入 registry 凭据解析器:部署镜像前自动 docker login 目标机。
+// 不注入 → 跳过自动登录(沿用目标机既有登录)。
+func WithRegistryResolver(r RegistryCredentialResolver) Option {
+	return func(s *service) { s.registryResolver = r }
+}
 
 // New 构造部署 Service。
 //   - targetSvc:通用 SSH 执行层(Story 4.1),部署命令经其 Exec 执行(array 不拼 shell)。
