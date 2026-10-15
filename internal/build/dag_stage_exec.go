@@ -193,7 +193,7 @@ func NewStageExecutor(b *Builder, reportSink TestReportSink) dagrun.StageExecuto
 				if errors.Is(ctx.Err(), context.Canceled) {
 					return run.ErrCanceled
 				}
-				_ = rep.Log(ctx, streamStderr, "源码克隆失败(鉴权/网络/ref 不存在或被 SSRF 拒绝)")
+				_ = rep.Log(ctx, streamStderr, cerr.Error())
 				return ErrBuildFailed
 			}
 			if resolved != nil && resolved.CommitShort != "" {
@@ -505,7 +505,7 @@ func (b *Builder) cloneJobWorkspace(ctx context.Context, r *run.Run, proj *proje
 		if errors.Is(ctx.Err(), context.Canceled) {
 			return "", "", func() {}, run.ErrCanceled
 		}
-		_ = rep.Log(ctx, streamStderr, "源码克隆失败(鉴权/网络/ref 不存在或被 SSRF 拒绝)")
+		_ = rep.Log(ctx, streamStderr, cerr.Error())
 		return "", "", func() {}, ErrBuildFailed
 	}
 	commitTag := "latest"

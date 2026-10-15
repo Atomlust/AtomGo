@@ -3,12 +3,15 @@ package build
 import (
 	"context"
 	"errors"
+	"net"
+	"net/url"
 	"os"
 	"strings"
 	"time"
 
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/transport"
 
 	"github.com/atomlust/atomgo/internal/gitauth"
 )
@@ -23,6 +26,85 @@ var (
 	// ErrCloneFailed 表示克隆/检出失败(鉴权/网络/ref 不存在等;不泄漏底层文本)。
 	ErrCloneFailed = errors.New("build: clone failed")
 )
+
+// CloneErrorCategory 是克隆失败的可安全暴露类别(刻意不含 URL/密钥/底层文本)。
+// 用途:前端/用户仅凭类别即可定位是「凭据」「网络」「ref」还是「SSRF」,无需看原始错误。
+type CloneErrorCategory string
+
+const (
+	CatAuth    CloneErrorCategory = "auth"    // 鉴权被拒(凭据过期/吊销/权限不足)
+	CatNetwork CloneErrorCategory = "network" // 网络不可达(DNS/代理/被墙/超时)
+	CatRef     CloneErrorCategory = "ref"     // 引用不存在(分支被删/commit 被覆盖)
+	CatSSRF    CloneErrorCategory = "ssrf"    // 仓库地址被 SSRF 收口拒绝
+	CatUnknown CloneErrorCategory = "unknown" // 无法归类
+)
+
+// Message 返回对应用户可读、不含敏感信息的失败说明(定位用)。
+func (k CloneErrorCategory) Message() string {
+	switch k {
+	case CatAuth:
+		return "源码克隆失败:鉴权被拒 — 请检查项目绑定的 Git 凭据/令牌是否过期、被吊销或权限不足(私仓需可读权限)"
+	case CatNetwork:
+		return "源码克隆失败:网络不可达 — 请检查本机到仓库主机的网络/DNS/代理;公网仓库(GitHub 等)在国内可能需代理或被墙"
+	case CatRef:
+		return "源码克隆失败:引用(ref)不存在 — 请检查本次触发指定的分支名或 commit 是否仍存在(分支被删/commit 被 force-push 覆盖)"
+	case CatSSRF:
+		return "源码克隆失败:仓库地址被 SSRF 收口拒绝 — 仅允许 http(s)/git-ssh,拒云元数据/链路本地/回环;检查仓库地址是否合法(勿在 ssh:// 中嵌密码)"
+	default:
+		return "源码克隆失败(鉴权/网络/ref 不存在或被 SSRF 拒绝)"
+	}
+}
+
+// CloneError 是克隆失败的统一错误:携带类别(可安全暴露)+ 底层原因(仅用于 errors.Is/日志,不进用户消息)。
+// Unwrap 透传 ErrRepoBlocked / ErrCloneFailed 哨兵,保持既有 errors.Is 语义。
+type CloneError struct {
+	Category CloneErrorCategory
+	Cause    error
+}
+
+func (e *CloneError) Error() string { return e.Category.Message() }
+func (e *CloneError) Unwrap() error { return e.Cause }
+
+// classifyCloneErr 把 go-git 底层错误归类为可安全暴露的类别。
+// 安全约束:仅用底层错误做「分类判断」,绝不把其文本拼进用户消息(可能含主机/路径细节)。
+func classifyCloneErr(err error) CloneErrorCategory {
+	if err == nil {
+		return CatUnknown
+	}
+	// 鉴权类:go-git 显式类型错误,最可靠。
+	if errors.Is(err, transport.ErrAuthenticationRequired) ||
+		errors.Is(err, transport.ErrAuthorizationFailed) {
+		return CatAuth
+	}
+	msg := strings.ToLower(err.Error())
+	// 引用/ref 不存在(分支/commit 检索失败)。
+	if strings.Contains(msg, "reference not found") ||
+		strings.Contains(msg, "unknown revision") ||
+		strings.Contains(msg, "does not exist") {
+		return CatRef
+	}
+	// 网络类:Go 标准错误类型。
+	var netErr *net.OpError
+	var urlErr *url.Error
+	var sysErr *os.SyscallError
+	if errors.As(err, &netErr) || errors.As(err, &urlErr) || errors.As(err, &sysErr) {
+		return CatNetwork
+	}
+	// 网络类:常见文本特征(go-git HTTP/Smart 传输包裹后的描述)。
+	if strings.Contains(msg, "no such host") ||
+		strings.Contains(msg, "dial tcp") ||
+		strings.Contains(msg, "connection refused") ||
+		strings.Contains(msg, "connection reset") ||
+		strings.Contains(msg, "i/o timeout") ||
+		strings.Contains(msg, "deadline exceeded") ||
+		strings.Contains(msg, "tls handshake") ||
+		strings.Contains(msg, "network is unreachable") ||
+		strings.Contains(msg, "no route to host") ||
+		strings.Contains(msg, "proxy") {
+		return CatNetwork
+	}
+	return CatUnknown
+}
 
 // Cloner 把项目仓库在指定 commit/branch 上克隆到**磁盘临时工作区**(Docker build 需 `.` 上下文落盘)。
 //
@@ -52,10 +134,10 @@ type CloneResolved struct {
 func (c *Cloner) Clone(ctx context.Context, repoURL, username, token, branch, commit, destDir string) (*CloneResolved, error) {
 	repoURL = strings.TrimSpace(repoURL)
 	if repoURL == "" {
-		return nil, ErrCloneFailed
+		return nil, &CloneError{Category: CatUnknown, Cause: ErrCloneFailed}
 	}
 	if !c.allowInsecure && !validRepoURL(repoURL) {
-		return nil, ErrRepoBlocked
+		return nil, &CloneError{Category: CatSSRF, Cause: ErrRepoBlocked}
 	}
 
 	cctx, cancel := context.WithTimeout(ctx, cloneTimeout)
@@ -84,19 +166,19 @@ func (c *Cloner) Clone(ctx context.Context, repoURL, username, token, branch, co
 
 	repo, err := gogit.PlainCloneContext(cctx, destDir, false, opts)
 	if err != nil {
-		// 浅克隆 + 指定分支失败时不再重试(可能是鉴权/不可达);映射干净错误。
-		return nil, ErrCloneFailed
+		// 浅克隆 + 指定分支失败时不再重试(可能是鉴权/不可达);映射干净错误(带安全类别)。
+		return nil, &CloneError{Category: classifyCloneErr(err), Cause: ErrCloneFailed}
 	}
 
 	resolved := &CloneResolved{}
 	if commit != "" {
 		wt, werr := repo.Worktree()
 		if werr != nil {
-			return nil, ErrCloneFailed
+			return nil, &CloneError{Category: classifyCloneErr(werr), Cause: ErrCloneFailed}
 		}
 		hash := plumbing.NewHash(commit)
 		if cerr := wt.Checkout(&gogit.CheckoutOptions{Hash: hash, Force: true}); cerr != nil {
-			return nil, ErrCloneFailed
+			return nil, &CloneError{Category: classifyCloneErr(cerr), Cause: ErrCloneFailed}
 		}
 		resolved.CommitShort = shortSHA(commit)
 	} else if head, herr := repo.Head(); herr == nil {
