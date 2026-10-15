@@ -50,11 +50,13 @@ jobs:
       # 发版后把 ghcr.io 包设为公开:否则匿名 docker pull 会 401(unauthorized)。
       # 关键:工作流用 GITHUB_TOKEN 推送的镜像,包会挂在「仓库(repository)」名下(repo-linked),
       # 必须用 /repos/{owner}/{repo}/packages 端点;org 端点对 repo-linked 包会返回伪 204 而不生效。
-      # 最后用匿名 registry 轮询自校验:返回 200 即公开生效,否则明确报错(GITHUB_TOKEN 可能无权改可见性)。
+      # 最后用匿名 registry 轮询自校验:返回 200 即公开生效;否则仅告警(不阻断发版,GITHUB_TOKEN 可能无权改可见性)。
       - name: make ghcr package public
         if: success()
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # 优先用具备 write:packages 权限的 PAT(仓库密钥 GHCR_PAT);未配置则回退 GITHUB_TOKEN。
+          # 回退时通常无权改包可见性 —— 此时只告警不阻断:产物与镜像已推送,包公开是一次性手动设置。
+          GHCR_TOKEN: ${{ secrets.GHCR_PAT || secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           OWNER="atomlust"
@@ -64,7 +66,7 @@ jobs:
           # 1) 优先 repo-linked 端点(工作流推送的包归属仓库,这是正确端点)
           set +e
           code=$(curl -sS -o /dev/null -w "%{http_code}" -X PATCH \
-            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Authorization: Bearer $GHCR_TOKEN" \
             -H "Accept: application/vnd.github+json" \
             "https://api.github.com/repos/$OWNER/$REPO/packages/container/$PKG/visibility" \
             -d '{"visibility":"public"}')
@@ -73,7 +75,7 @@ jobs:
           # 2) 兜底:org 端点(部分命名空间直接归 org 所有)
           if [ "$code" != "204" ]; then
             code=$(curl -sS -o /dev/null -w "%{http_code}" -X PATCH \
-              -H "Authorization: Bearer $GITHUB_TOKEN" \
+              -H "Authorization: Bearer $GHCR_TOKEN" \
               -H "Accept: application/vnd.github+json" \
               "https://api.github.com/orgs/$OWNER/packages/container/$PKG/visibility" \
               -d '{"visibility":"public"}')
@@ -90,5 +92,5 @@ jobs:
             [ "$v" = "200" ] && { echo "ghcr package is now PUBLIC"; exit 0; }
             sleep 10
           done
-          echo "::error::ghcr package still private after PATCH. GITHUB_TOKEN may lack permission to change repo/org package visibility — use a PAT (write:packages) or set public manually in GitHub UI (Packages → atomgo → Settings → Public)."
-          exit 1
+          echo "::warning::ghcr 包仍为私有(PATCH 未生效),但 Release 产物与镜像均已推送,不受影响。GITHUB_TOKEN 通常无权改包可见性 —— 请在 GitHub UI 手动设为 Public(Packages → atomgo → Settings,一次设置覆盖所有 tag);或在仓库配置密钥 GHCR_PAT(具备 write:packages 的 PAT)让本步自动完成。"
+          exit 0
