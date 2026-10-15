@@ -64,6 +64,10 @@ const extraRows    = ref<KVRow[]>([])
 
 const showAdvanced = ref(false)
 
+// 仅「脚本类」节点(script/custom/templated/前后端构建)消费 schema 外的自由键值
+// (作命令模板 {{key}} 占位)。其余类型后端白名单执行、extras 纯属死配置,不展示也不落库。
+const supportsAdvancedRaw = computed<boolean>(() => isScriptClassType(localType.value))
+
 // 仅当「选了不同 job」或「改了 job 类型」时才重置视图模式(steps/raw);纯内容编辑不重置。
 // 否则:在「原始参数」视图编辑某字段 → blur 提交 → 父回写 props.job → 本 watch 再跑 →
 // 会把视图无端切回「可视化步骤」(用户实测的 bug)。
@@ -87,8 +91,14 @@ function splitOnType(type: string, config: Record<string, string>, repickView = 
     if (!extras.some(([ek]) => ek === k)) typed[k] = v
   }
   typedConfig.value = typed
-  extraRows.value = extras.map(([k, v]) => ({ _key: ++_kvSeq, k, v }))
-  showAdvanced.value = extras.length > 0
+  // 仅脚本类节点展示并保留 extras;其余类型后端不消费,直接丢弃(不展示也不落库)。
+  if (isScriptClassType(type)) {
+    extraRows.value = extras.map(([k, v]) => ({ _key: ++_kvSeq, k, v }))
+    showAdvanced.value = extras.length > 0
+  } else {
+    extraRows.value = []
+    showAdvanced.value = false
+  }
   if (repickView) pickViewMode(config)
 }
 
@@ -309,6 +319,10 @@ function extrasToObject(rows: KVRow[]): Record<string, string> {
 
 /** Build the full config object from typed form + advanced extras (typed wins on conflict). */
 function currentConfig(): Record<string, string> {
+  // 非脚本类节点的 extras 是死配置,即便 extraRows 因其它路径被填充也一律丢弃,不落库。
+  if (!isScriptClassType(localType.value)) {
+    return { ...typedConfig.value }
+  }
   return { ...extrasToObject(extraRows.value), ...typedConfig.value }
 }
 
@@ -613,8 +627,8 @@ async function confirmSave(): Promise<void> {
       </div>
     </div>
 
-    <!-- Advanced raw KV (extras not covered by the schema) -->
-    <div class="drawer-section">
+    <!-- Advanced raw KV (extras not covered by the schema) — 仅脚本类节点提供(其余类型后端不消费) -->
+    <div v-if="supportsAdvancedRaw" class="drawer-section">
       <button
         class="advanced-toggle"
         :class="{ 'advanced-toggle--open': showAdvanced }"
