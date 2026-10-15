@@ -314,3 +314,27 @@ func splitStatements(sqlText string) []string {
 func migrationVersion(entry string) string {
 	return strings.TrimSuffix(path.Base(entry), ".sql")
 }
+
+// MigrationCount 返回某方言内嵌迁移文件数(每个 *.sql = 一个版本)。
+// 供测试断言「已应用迁移数 == 内嵌迁移文件数」,与 TestMigrationSetsMatch 的
+// 「整合(squash)后仅保留 0001_baseline」契约一致(历史上曾 54 个增量文件,归一后
+// 每方言 1 个)。按方言映射到对应 embed.FS,与 migrate 的选取逻辑同源。
+func MigrationCount(d Dialect) int {
+	var fsys embed.FS
+	dir := "sqlite"
+	switch d {
+	case MySQL:
+		fsys = mysqlMigrationFS
+		dir = "mysql"
+	case Postgres:
+		fsys = postgresMigrationFS
+		dir = "postgres"
+	default:
+		fsys = sqliteMigrationFS
+	}
+	entries, err := fs.Glob(fsys, "migrations/"+dir+"/*.sql")
+	if err != nil {
+		return 0
+	}
+	return len(entries)
+}

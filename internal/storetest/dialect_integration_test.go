@@ -11,7 +11,9 @@ import (
 
 func now() string { return time.Now().UTC().Format(time.RFC3339) }
 
-// TestMigrationsApplied 验证两方言都把全部迁移跑完、计数与文件数一致、且重开幂等。
+// TestMigrationsApplied 验证各方言都把全部迁移跑完、已应用数 == 内嵌迁移文件数、且重开幂等。
+// 计数经 store.MigrationCount 动态取得(整合 squash 后每方言仅 0001_baseline.sql 一个文件),
+// 不再写死历史增量数,未来新增增量迁移时本断言自动跟随。
 func TestMigrationsApplied(t *testing.T) {
 	storetest.ForEachDialect(t, func(t *testing.T, st *store.Store) {
 		ctx := context.Background()
@@ -19,8 +21,9 @@ func TestMigrationsApplied(t *testing.T) {
 		if err := st.DB.QueryRowContext(ctx, `SELECT COUNT(1) FROM schema_migrations`).Scan(&n); err != nil {
 			t.Fatalf("count migrations: %v", err)
 		}
-		if n != 54 {
-			t.Fatalf("应用迁移数 = %d, 期望 54", n)
+		want := store.MigrationCount(st.Dialect)
+		if n != want {
+			t.Fatalf("应用迁移数 = %d, 期望 %d(内嵌迁移文件数,方言 %s)", n, want, st.Dialect)
 		}
 		// 核心领域表存在(随手验一张)。
 		if _, err := st.DB.ExecContext(ctx, `SELECT 1 FROM audit_log WHERE 1=0`); err != nil {
