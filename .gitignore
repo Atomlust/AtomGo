@@ -37,6 +37,9 @@
 .idea/
 .vscode/
 *.swp
+# Windows 保留设备名(nul/con/prn...)伪文件:在 Windows 上被解析为空设备而非真实文件,
+# git 目录扫描会误报为未跟踪项且无法真正删除。加入忽略,避免污染 status 与误 add。
+/nul
 
 # sky-aitest（自动注入：工作区/凭证/运行时配置不入库）
 # 注:这些规则全部锚定根目录(前导 /),避免裸目录名误伤源码(如 auth/ 曾误吞 internal/auth)。
