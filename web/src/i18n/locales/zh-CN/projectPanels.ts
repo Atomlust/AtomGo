@@ -26,7 +26,7 @@ export default {
 
     // Webhook section
     webhookTitle: 'Webhook 接入',
-    webhookSub: '代码平台 · Gitee',
+    webhookSub: '代码平台 · Gitee / GitHub / GitLab / Gitea',
     endpointLabel: '接收端点',
     copied: '已复制',
     copyUrlAria: '复制 Webhook URL',
@@ -37,10 +37,15 @@ export default {
     secretNewLabel: '新密钥(仅此一次)',
     copyNewSecretAria: '复制新密钥',
     copySecret: '复制密钥',
+    copyCurrentSecret: '复制密钥',
+    copyCurrentSecretAria: '复制当前生效的签名密钥',
+    secretHint: '代码平台发送 Webhook 时用同一密钥签名,AtomGo 据此校验请求来源、防止伪造触发。点「复制密钥」后粘贴到平台 Webhook 的密钥/密码字段即可。「重置」会让旧密钥立即失效,仓库端需同步更新。',
+    errRevealGeneric: '读取密钥失败,请稍后重试。',
+
     resetSecretAria: '重置签名密钥',
     reset: '重置',
     pushConfigLabel: '推送配置',
-    pushConfigHint: '在 Gitee 仓库 → 管理 → WebHooks 粘贴以上地址与密钥,事件勾选 Push / Tag Push / Release / Pull Request。',
+    pushConfigHint: '在各平台的仓库 Webhook 设置里各新建一条,URL 与密钥都填上面的内容(**所有平台共用同一套**)。事件勾选 Push / Tag Push / Release / Pull Request(Merge Request)。注意:Pull Request 仅在「创建、重开、推送新提交」时触发,改标签、指派 Review 等不会触发。',
 
     // Events section
     eventsTitle: '触发事件',

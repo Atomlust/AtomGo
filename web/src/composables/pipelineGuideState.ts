@@ -35,5 +35,7 @@ export function guideIssueTarget(code: string, scope: string, projectId: string)
   if (code === 'project_credential_missing') return `/projects?onboardingEdit=${encodeURIComponent(projectId)}`
   if (code === 'vault_unconfigured' || code === 'credential_missing') return '/settings/vault'
   if (code === 'server_missing') return '/settings/servers'
-  return `/projects/${encodeURIComponent(projectId)}/pipeline?tab=${['canvas', 'vars', 'envs', 'triggers'].includes(scope) ? scope : 'canvas'}&onboardingGuide=1`
+  // 触发与规则已拆分为「触发设置 / 部署规则」,校验 scope 'triggers' 落到部署规则 tab。
+  const tab = scope === 'triggers' ? 'deployRules' : (['canvas', 'vars', 'envs', 'triggerSettings', 'deployRules'].includes(scope) ? scope : 'canvas')
+  return `/projects/${encodeURIComponent(projectId)}/pipeline?tab=${tab}&onboardingGuide=1`
 }

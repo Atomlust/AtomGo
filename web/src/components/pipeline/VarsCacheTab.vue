@@ -183,6 +183,7 @@ function maskFor(row: VarRow): string {
           :disabled="disabled"
         >
         <p class="imgname-hint">{{ t('pipelinePanels.vcImageNameHint') }}</p>
+        <p class="imgname-hint">{{ t('pipelinePanels.vcImageNameImpact') }}</p>
       </div>
     </section>
 

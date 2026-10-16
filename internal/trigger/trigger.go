@@ -110,6 +110,13 @@ type ResetResult struct {
 	Masked string
 }
 
+// RevealResult 是查看密钥的结果:完整明文 + 掩码。与 ResetResult 的关键区别是
+// **不轮换密钥**——旧值继续有效,仅把当前生效值解密回显(供粘贴到代码平台的 Webhook 配置)。
+type RevealResult struct {
+	Secret string // 当前生效的完整明文
+	Masked string
+}
+
 // Service 定义触发配置领域对外接口。
 type Service interface {
 	// Get 返回项目触发配置(密钥仅掩码)。首次访问无配置时惰性生成默认
@@ -119,6 +126,9 @@ type Service interface {
 	Save(ctx context.Context, projectID string, in SaveInput) (*Config, error)
 	// ResetSecret 重新生成并加密签名密钥(旧值失效),返回完整明文(仅此一次)+ 掩码。
 	ResetSecret(ctx context.Context, projectID string) (*ResetResult, error)
+	// RevealSecret 返回当前生效密钥的完整明文与掩码。**不轮换**:旧值继续有效,
+	// 仅解密回显(供粘贴到代码平台的 Webhook 配置)。master key 未配置 → ErrVaultUnconfigured。
+	RevealSecret(ctx context.Context, projectID string) (*RevealResult, error)
 }
 
 // service 是 store + vault 支撑的 Service 实现。
@@ -218,6 +228,38 @@ func (s *service) ResetSecret(ctx context.Context, projectID string) (*ResetResu
 		return nil, ErrNotFound
 	}
 	return &ResetResult{Secret: secret, Masked: masked}, nil
+}
+
+// RevealSecret 返回当前生效密钥的完整明文(不轮换,旧值继续有效)。
+// 先经 Get 完成项目存在性与 vault 可用性校验,再读密文解密回显。
+// master key 未配置/解密失败 → ErrVaultUnconfigured;无配置行 → ErrNotFound。
+func (s *service) RevealSecret(ctx context.Context, projectID string) (*RevealResult, error) {
+	if _, err := s.Get(ctx, projectID); err != nil {
+		return nil, err
+	}
+	var sealed []byte
+	err := s.db.QueryRowContext(ctx,
+		`SELECT webhook_secret_ciphertext FROM pipeline_triggers WHERE project_id = ?`, projectID,
+	).Scan(&sealed)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("trigger: load secret ciphertext: %w", err)
+	}
+	if s.vault == nil {
+		return nil, ErrVaultUnconfigured
+	}
+	plain, err := s.vault.OpenSecret(sealed)
+	if err != nil {
+		if errors.Is(err, vault.ErrVaultUnconfigured) {
+			return nil, ErrVaultUnconfigured
+		}
+		return nil, fmt.Errorf("trigger: open secret: %w", err)
+	}
+	// 明文用完即弃;Secret/Masked 均为 []byte → string 的拷贝,不受清零影响。
+	defer zero(plain)
+	return &RevealResult{Secret: string(plain), Masked: maskSecret(string(plain))}, nil
 }
 
 // load 读取已存在的配置行;同时回算掩码。无行 → ErrNotFound。

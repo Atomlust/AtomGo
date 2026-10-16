@@ -23,7 +23,7 @@ export default {
     patternIllegal: '허용되지 않는 문자가 포함되어 있습니다. 문자, 숫자, / - _ . * ? [ ]만 허용됩니다',
 
     webhookTitle: 'Webhook 연동',
-    webhookSub: '코드 플랫폼 · Gitee',
+    webhookSub: 'Git 플랫폼 · Gitee / GitHub / GitLab / Gitea',
     endpointLabel: '수신 엔드포인트',
     copied: '복사됨',
     copyUrlAria: 'Webhook URL 복사',
@@ -34,10 +34,15 @@ export default {
     secretNewLabel: '새 시크릿(이번 한 번만)',
     copyNewSecretAria: '새 시크릿 복사',
     copySecret: '시크릿 복사',
+    copyCurrentSecret: '키 복사',
+    copyCurrentSecretAria: '현재 활성 서명 키 복사',
+    secretHint: 'Git 플랫폼은 이 키로 웹훅에 서명하고, AtomGo는 이를 검증해 요청이 실제로 여러분의 저장소에서 온 것인지 확인하여 위조 트리거를 차단합니다. 「키 복사」를 눌러 플랫폼 웹훅의 시크릿/비밀번호 필드에 붙여넣으세요. 「초기화」하면 이전 키는 즉시 무효화되므로 플랫폼 쪽도 함께 갱신해야 합니다.',
+    errRevealGeneric: '키를 읽지 못했습니다. 잠시 후 다시 시도해 주세요.',
+
     resetSecretAria: '서명 시크릿 재설정',
     reset: '재설정',
     pushConfigLabel: '푸시 설정',
-    pushConfigHint: 'Gitee 저장소 → 관리 → WebHooks에서 위 주소와 시크릿을 붙여넣고, Push / Tag Push / Release / Pull Request 이벤트를 체크하세요.',
+    pushConfigHint: '각 플랫폼의 저장소 웹훅 설정에 위 URL과 키를 각각 등록하세요(**모든 플랫폼이 동일한 URL·키를 공유**). 이벤트는 Push / Tag Push / Release / Pull Request(Merge Request)를 선택합니다. 참고: 풀 리퀘스트는 「생성·재개·새 커밋 푸시」 시에만 실행되며, 라벨 지정이나 리뷰어 지정으로는 실행되지 않습니다.',
 
     eventsTitle: '트리거 이벤트',
     eventsSub: '어떤 이벤트로 파이프라인 실행을 만들지 선택',

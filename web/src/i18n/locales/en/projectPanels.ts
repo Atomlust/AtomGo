@@ -23,7 +23,7 @@ export default {
     patternIllegal: 'Contains illegal characters; only letters, digits, / - _ . * ? [ ] are allowed',
 
     webhookTitle: 'Webhook Ingress',
-    webhookSub: 'Code platform · Gitee',
+    webhookSub: 'Git hosts · Gitee / GitHub / GitLab / Gitea',
     endpointLabel: 'Receiving endpoint',
     copied: 'Copied',
     copyUrlAria: 'Copy webhook URL',
@@ -34,10 +34,15 @@ export default {
     secretNewLabel: 'New secret (shown once)',
     copyNewSecretAria: 'Copy new secret',
     copySecret: 'Copy secret',
+    copyCurrentSecret: 'Copy secret',
+    copyCurrentSecretAria: 'Copy the currently active signing secret',
+    secretHint: 'Your Git host signs every webhook with this secret; AtomGo verifies it to confirm the request really came from your repository and to block forged triggers. Click "Copy secret" and paste it into the webhook secret/password field on your Git host. "Reset" invalidates the old secret immediately — remember to update it on the host side too.',
+    errRevealGeneric: 'Failed to read the secret. Please try again later.',
+
     resetSecretAria: 'Reset signing secret',
     reset: 'Reset',
     pushConfigLabel: 'Push setup',
-    pushConfigHint: 'In the Gitee repo → Manage → WebHooks, paste the address and secret above and check the Push / Tag Push / Release / Pull Request events.',
+    pushConfigHint: 'Add one webhook per Git host, using the URL and secret above — **all hosts share the same URL and secret**. Subscribe to Push / Tag Push / Release / Pull Request (Merge Request). Note: pull requests trigger only when created, reopened, or when new commits are pushed; labeling or assigning reviewers does not trigger anything.',
 
     eventsTitle: 'Trigger Events',
     eventsSub: 'Choose which events create a pipeline run',

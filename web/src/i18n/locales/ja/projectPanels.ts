@@ -23,7 +23,7 @@ export default {
     patternIllegal: '不正な文字が含まれています。許可されるのは英字、数字、/ - _ . * ? [ ] のみです',
 
     webhookTitle: 'Webhook 連携',
-    webhookSub: 'コードプラットフォーム · Gitee',
+    webhookSub: 'コードプラットフォーム · Gitee / GitHub / GitLab / Gitea',
     endpointLabel: '受信エンドポイント',
     copied: 'コピーしました',
     copyUrlAria: 'Webhook URL をコピー',
@@ -34,10 +34,15 @@ export default {
     secretNewLabel: '新しいシークレット（今回のみ）',
     copyNewSecretAria: '新しいシークレットをコピー',
     copySecret: 'シークレットをコピー',
+    copyCurrentSecret: 'キーをコピー',
+    copyCurrentSecretAria: '現在有効な署名キーをコピー',
+    secretHint: 'Git プラットフォームはこのキーで Webhook に署名します。AtomGo はそれを検証して、リクエストが本当にあなたのリポジトリからのものかを確認し、偽装トリガーを防ぎます。「キーをコピー」を押して、プラットフォームの Webhook のシークレット/パスワード欄に貼り付けてください。「リセット」すると旧キーは即座に無効になります。プラットフォーム側の更新も必要です。',
+    errRevealGeneric: 'キーの読み取りに失敗しました。しばらくしてからお試しください。',
+
     resetSecretAria: '署名シークレットをリセット',
     reset: 'リセット',
     pushConfigLabel: 'プッシュ設定',
-    pushConfigHint: 'Gitee リポジトリ → 管理 → WebHooks で上記のアドレスとシークレットを貼り付け、Push / Tag Push / Release / Pull Request イベントにチェックを入れます。',
+    pushConfigHint: '各プラットフォームのリポジトリ Webhook 設定に、上記の URL とキーをそれぞれ登録します(**すべてのプラットフォームで同じ URL・キーを共有**)。イベントは Push / Tag Push / Release / Pull Request(Merge Request) を選択してください。注:プルリクエストは「作成・再開・新しいコミットのプッシュ」時のみトリガーされ、ラベル付けやレビュアー割り当てではトリガーされません。',
 
     eventsTitle: 'トリガーイベント',
     eventsSub: 'どのイベントでパイプライン実行を作成するか選択',

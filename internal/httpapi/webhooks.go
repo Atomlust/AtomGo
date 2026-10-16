@@ -75,14 +75,33 @@ func makeWebhookHandler(rc *trigger.Receiver) http.HandlerFunc {
 			return
 		}
 
-		res, err := rc.Handle(r.Context(), trigger.Delivery{
+		// 按投递头自动识别来源平台(GitHub / Gitee / GitLab / Gitea),并按该平台的契约取头。
+		// 识别不出时回落 Gitee:与历史行为一致(最终由验签判定 → 401),不引入新的失败模式。
+		provider, event, credential, ts, deliveryID, okp := trigger.ExtractDelivery(r.Header)
+		if !okp {
+			provider = trigger.ProviderGitee
+			event = r.Header.Get(trigger.HeaderGiteeEvent)
+			credential = r.Header.Get(trigger.HeaderGiteeToken)
+			ts = r.Header.Get(trigger.HeaderGiteeTimestamp)
+			deliveryID = r.Header.Get(trigger.HeaderGiteeDelivery)
+		}
+
+		d := trigger.Delivery{
 			Token:      token,
-			Event:      r.Header.Get(trigger.HeaderGiteeEvent),
-			TokenHdr:   r.Header.Get(trigger.HeaderGiteeToken),
-			Timestamp:  r.Header.Get(trigger.HeaderGiteeTimestamp),
-			DeliveryID: r.Header.Get(trigger.HeaderGiteeDelivery),
+			Provider:   provider,
+			Event:      event,
+			Timestamp:  ts,
+			DeliveryID: deliveryID,
 			RawBody:    body,
-		})
+		}
+		// credential 语义因平台而异:GitHub/Gitea 是十六进制签名头,其余是 token 头。
+		if provider == trigger.ProviderGitHub || provider == trigger.ProviderGitea {
+			d.Signature = credential
+		} else {
+			d.TokenHdr = credential
+		}
+
+		res, err := rc.Handle(r.Context(), d)
 		if err != nil {
 			switch {
 			case errors.Is(err, trigger.ErrUnauthorized):

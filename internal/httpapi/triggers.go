@@ -202,3 +202,35 @@ func makeResetTriggerSecretHandler(svc trigger.Service, aud audit.Recorder) http
 		})
 	}
 }
+
+// makeRevealTriggerSecretHandler 返回 POST /api/projects/{id}/trigger/secret/reveal handler。
+// 回显**当前生效**密钥的完整明文,供粘贴到代码平台的 Webhook 配置;与 reset 不同,
+// 它不轮换密钥(仓库里已配好的旧值继续有效)。
+// 成功后追加 trigger_secret_reveal 审计;detail 绝不含明文/密文,仅记掩码。
+func makeRevealTriggerSecretHandler(svc trigger.Service, aud audit.Recorder) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if svc == nil {
+			writeError(w, http.StatusServiceUnavailable, "internal", "触发配置服务未初始化")
+			return
+		}
+		id := chi.URLParam(r, "id")
+		res, err := svc.RevealSecret(r.Context(), id)
+		if err != nil {
+			writeTriggerError(w, err)
+			return
+		}
+		recordAudit(r.Context(), aud, audit.Entry{
+			Actor:      auditActor,
+			Action:     audit.ActionTriggerSecretReveal,
+			TargetType: audit.TargetTrigger,
+			TargetID:   id,
+			// detail 仅记掩码;即便 Masker 也会兜底,绝不写明文密钥。
+			Detail: map[string]any{"webhookSecretMasked": res.Masked},
+			IP:     clientIP(r),
+		})
+		writeJSON(w, http.StatusOK, map[string]string{
+			"webhookSecret":       res.Secret,
+			"webhookSecretMasked": res.Masked,
+		})
+	}
+}

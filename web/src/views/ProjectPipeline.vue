@@ -2,7 +2,7 @@
 /**
  * ProjectPipeline — 4-tab pipeline configuration editor.
  * Tabs: 流水线编排 / 变量与缓存 / 触发与规则 / 环境与凭据
- * URL state: ?tab=canvas|vars|triggers|envs  (shareable)
+ * URL state: ?tab=canvas|vars|triggerSettings|deployRules|envs  (shareable; legacy triggers→deployRules)
  */
 import { ref, shallowRef, computed, onMounted, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -47,18 +47,22 @@ const projectId = computed(() => route.params.id as string)
 
 // ─── Tabs ─────────────────────────────────────────────────────────────────────
 
-type TabKey = 'canvas' | 'vars' | 'triggers' | 'envs'
+type TabKey = 'canvas' | 'vars' | 'triggerSettings' | 'deployRules' | 'envs'
 
 const TABS = computed<Array<{ key: TabKey; label: string }>>(() => [
-  { key: 'canvas',   label: t('projectPipeline.tabCanvas') },
-  { key: 'envs',     label: t('projectPipeline.tabEnvs') },
-  { key: 'vars',     label: t('projectPipeline.tabVars') },
-  { key: 'triggers', label: t('projectPipeline.tabTriggers') },
+  { key: 'canvas',          label: t('projectPipeline.tabCanvas') },
+  { key: 'envs',            label: t('projectPipeline.tabEnvs') },
+  { key: 'vars',            label: t('projectPipeline.tabVars') },
+  { key: 'deployRules',     label: t('projectPipeline.tabDeployRules') },
+  { key: 'triggerSettings', label: t('projectPipeline.tabTriggerSettings') },
 ])
 
 const activeTab = computed<TabKey>(() => {
   const q = route.query.tab
-  if (q === 'canvas' || q === 'vars' || q === 'triggers' || q === 'envs') return q
+  // 旧书签/外链 ?tab=triggers 仍可用,落到「部署规则」(原触发与规则的内容主体)。
+  if (q === 'triggerSettings' || q === 'deployRules') return q
+  if (q === 'triggers') return 'deployRules'
+  if (q === 'canvas' || q === 'vars' || q === 'envs') return q
   return 'canvas'
 })
 
@@ -399,7 +403,9 @@ function handleValidationClose(): void {
 
 /** Emitted by ValidationPanel when user clicks an issue row. */
 function handleLocate(scope: IssueScope): void {
-  setTab(scope as TabKey)
+  // 校验 scope 'triggers' 在拆分后映射到「部署规则」tab(触发与规则的问题均属部署规则范畴)。
+  const target: TabKey = scope === 'triggers' ? 'deployRules' : (scope as TabKey)
+  setTab(target)
 }
 
 // Re-fetch after tab switch (debounced, only when panel is open).
@@ -582,6 +588,7 @@ async function togglePrStatus(next: boolean): Promise<void> {
         class="tab-btn"
         :class="{ 'tab-btn--active': activeTab === tab.key }"
         role="tab"
+        :id="`tab-${tab.key}`"
         :aria-selected="activeTab === tab.key"
         :aria-controls="`tabpanel-${tab.key}`"
         @click="setTab(tab.key)"
@@ -760,16 +767,29 @@ async function togglePrStatus(next: boolean): Promise<void> {
           />
         </div>
 
-        <!-- 触发与规则 -->
+        <!-- 触发设置 -->
         <div
-          v-show="activeTab === 'triggers'"
-          id="tabpanel-triggers"
+          v-show="activeTab === 'triggerSettings'"
+          id="tabpanel-triggerSettings"
           class="tab-panel"
           role="tabpanel"
-          aria-labelledby="tab-triggers"
+          aria-labelledby="tab-triggerSettings"
         >
           <div class="triggers-stack">
-            <TriggersPanel :project-id="projectId" />
+            <TriggersPanel :project-id="projectId" section="settings" />
+          </div>
+        </div>
+
+        <!-- 部署规则 -->
+        <div
+          v-show="activeTab === 'deployRules'"
+          id="tabpanel-deployRules"
+          class="tab-panel"
+          role="tabpanel"
+          aria-labelledby="tab-deployRules"
+        >
+          <div class="triggers-stack">
+            <TriggersPanel :project-id="projectId" section="rules" />
           </div>
         </div>
 

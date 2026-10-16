@@ -23,7 +23,7 @@ export default {
     patternIllegal: 'Enthält unzulässige Zeichen; erlaubt sind nur Buchstaben, Ziffern, / - _ . * ? [ ]',
 
     webhookTitle: 'Webhook-Anbindung',
-    webhookSub: 'Code-Plattform · Gitee',
+    webhookSub: 'Git-Plattformen · Gitee / GitHub / GitLab / Gitea',
     endpointLabel: 'Empfangs-Endpunkt',
     copied: 'Kopiert',
     copyUrlAria: 'Webhook-URL kopieren',
@@ -34,10 +34,15 @@ export default {
     secretNewLabel: 'Neuer Schlüssel (nur dieses eine Mal)',
     copyNewSecretAria: 'Neuen Schlüssel kopieren',
     copySecret: 'Schlüssel kopieren',
+    copyCurrentSecret: 'Schlüssel kopieren',
+    copyCurrentSecretAria: 'Den derzeit gültigen Signaturschlüssel kopieren',
+    secretHint: 'Ihre Git-Plattform signiert jeden Webhook mit diesem Schlüssel; AtomGo prüft ihn, um die Herkunft der Anfrage zu bestätigen und gefälschte Auslöser abzuwehren. Klicken Sie auf „Schlüssel kopieren“ und fügen Sie ihn in das Secret-/Passwortfeld des Webhooks ein. „Zurücksetzen“ macht den alten Schlüssel sofort ungültig — aktualisieren Sie ihn dann auch plattformseitig.',
+    errRevealGeneric: 'Schlüssel konnte nicht gelesen werden. Bitte später erneut versuchen.',
+
     resetSecretAria: 'Signatur-Schlüssel zurücksetzen',
     reset: 'Zurücksetzen',
     pushConfigLabel: 'Push-Konfiguration',
-    pushConfigHint: 'Im Gitee-Repository → Verwalten → WebHooks die obige Adresse und den Schlüssel einfügen und die Ereignisse Push / Tag Push / Release / Pull Request markieren.',
+    pushConfigHint: 'Legen Sie auf jeder Plattform ein Webhook mit der obigen URL und dem obigen Secret an — **alle Plattformen teilen dieselbe URL und dasselbe Secret**. Abonnieren Sie Push / Tag Push / Release / Pull Request (Merge Request). Hinweis: Pull Requests lösen nur bei Erstellung, Wiedereröffnung oder neuen Commits aus; Beschriftungen oder Reviewer-Zuweisungen lösen nichts aus.',
 
     eventsTitle: 'Auslöser-Ereignisse',
     eventsSub: 'Wählen Sie, welche Ereignisse einen Pipeline-Lauf erzeugen',

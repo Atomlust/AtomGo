@@ -523,6 +523,8 @@ func New(webFS fs.FS, authn auth.Authenticator, opts ...Option) http.Handler {
 		ar.Get("/projects/{id}/trigger", makeGetTriggerHandler(t))
 		ar.With(requirePermission(auth.PermProjectsWrite)).Put("/projects/{id}/trigger", makeSaveTriggerHandler(t))
 		ar.With(requirePermission(auth.PermProjectsWrite)).Post("/projects/{id}/trigger/secret/reset", makeResetTriggerSecretHandler(t, aud))
+		// secret/reveal:回显当前生效密钥明文(不轮换),同具写权限要求 + CSRF。
+		ar.With(requirePermission(auth.PermProjectsWrite)).Post("/projects/{id}/trigger/secret/reveal", makeRevealTriggerSecretHandler(t, aud))
 
 		// 定时(cron)触发配置(Story 8-6)。o.cron 为 nil 时 handler 返回 503。GET 过 auth;PUT 过 auth + CSRF。
 		ar.Get("/projects/{id}/cron", makeGetCronHandler(o.cron))

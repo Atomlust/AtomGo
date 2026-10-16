@@ -23,7 +23,7 @@ export default {
     patternIllegal: 'Contient des caractères non autorisés ; seuls les lettres, chiffres, / - _ . * ? [ ] sont permis',
 
     webhookTitle: 'Intégration Webhook',
-    webhookSub: 'Plateforme de code · Gitee',
+    webhookSub: 'Plateformes Git · Gitee / GitHub / GitLab / Gitea',
     endpointLabel: 'Point de réception',
     copied: 'Copié',
     copyUrlAria: 'Copier l’URL du webhook',
@@ -34,10 +34,15 @@ export default {
     secretNewLabel: 'Nouvelle clé (une seule fois)',
     copyNewSecretAria: 'Copier la nouvelle clé',
     copySecret: 'Copier la clé',
+    copyCurrentSecret: 'Copier la clé',
+    copyCurrentSecretAria: 'Copier la clé de signature actuellement active',
+    secretHint: 'Votre plateforme Git signe chaque webhook avec cette clé ; AtomGo la vérifie pour confirmer que la requête provient bien de votre dépôt et bloquer les déclenchements falsifiés. Cliquez sur « Copier la clé » puis collez-la dans le champ clé/mot de passe du webhook. « Réinitialiser » invalide immédiatement l’ancienne clé — pensez à la mettre à jour côté plateforme.',
+    errRevealGeneric: 'Impossible de lire la clé. Veuillez réessayer plus tard.',
+
     resetSecretAria: 'Réinitialiser la clé de signature',
     reset: 'Réinitialiser',
     pushConfigLabel: 'Configuration du push',
-    pushConfigHint: 'Dans le dépôt Gitee → Gérer → WebHooks, collez l’adresse et la clé ci-dessus et cochez les événements Push / Tag Push / Release / Pull Request.',
+    pushConfigHint: 'Créez un webhook sur chaque plateforme avec l’URL et la clé ci-dessus — **toutes les plateformes partagent la même URL et la même clé**. Abonnez-vous à Push / Tag Push / Release / Pull Request (Merge Request). Remarque : les pull requests ne se déclenchent qu’à la création, à la réouverture ou lors de nouveaux commits ; étiqueter ou désigner des relecteurs ne déclenche rien.',
 
     eventsTitle: 'Événements Déclencheurs',
     eventsSub: 'Choisissez quels événements créent une exécution de pipeline',

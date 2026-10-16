@@ -14,6 +14,7 @@ import {
   getTrigger,
   saveTrigger,
   resetSecret,
+  revealSecret,
   type TriggerConfig,
   type UnmatchedPolicy,
 } from '../api/triggers'
@@ -28,9 +29,20 @@ import RunnerPanel from './RunnerPanel.vue'
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   projectId: string
-}>()
+  /**
+   * 拆分后的分区开关:
+   *   - 'all'      独立页 / 书签兼容(默认)—— 渲染全部。
+   *   - 'settings' 流水线配置「触发设置」tab —— webhook / 事件 / 定时 / 参数 / runner。
+   *   - 'rules'    流水线配置「部署规则」tab —— 分支映射 / 未匹配策略 / 路径过滤 / 并发 / 串联。
+   * 数据加载与保存逻辑保持单实例,不随分区重复。
+   */
+  section?: 'all' | 'settings' | 'rules'
+}>(), { section: 'all' })
+
+const showSettings = computed(() => props.section === 'all' || props.section === 'settings')
+const showRules = computed(() => props.section === 'all' || props.section === 'rules')
 
 const { t } = useI18n()
 
@@ -150,7 +162,7 @@ function parsePathFilters(text: string): string[] {
 
 // ─── Copy state ───────────────────────────────────────────────────────────────
 
-type CopyTarget = 'url' | 'secret'
+type CopyTarget = 'url' | 'secret' | 'currentSecret'
 const copiedTarget = ref<CopyTarget | null>(null)
 let copyTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -192,6 +204,30 @@ const revealedSecret = ref<string | null>(null)
 function copyWebhookUrl(): void { void copyText(webhookUrl.value, 'url') }
 function copySecret(): void {
   if (revealedSecret.value) void copyText(revealedSecret.value, 'secret')
+}
+
+// 复制**当前生效**密钥:向后端取一次明文(不轮换,仓库里已配好的继续有效)后写入剪贴板。
+// 明文不显示到界面上,只在内存里传给剪贴板,降低截屏/旁观泄露风险。
+const revealingSecret = ref(false)
+const secretError = ref('')
+
+async function copyCurrentSecret(): Promise<void> {
+  if (revealingSecret.value) return
+  revealingSecret.value = true
+  secretError.value = ''
+  try {
+    const result = await revealSecret(props.projectId)
+    webhookSecretMasked.value = result.webhookSecretMasked
+    revealedSecret.value = null
+    await copyText(result.webhookSecret, 'currentSecret')
+  } catch (err) {
+    secretError.value =
+      err instanceof HttpError && err.status === 0
+        ? t('projectPanels.triggers.errConnect')
+        : t('projectPanels.triggers.errRevealGeneric')
+  } finally {
+    revealingSecret.value = false
+  }
 }
 
 // ─── Reset secret modal ───────────────────────────────────────────────────────
@@ -456,7 +492,7 @@ const displayWebhookUrl = computed(() => {
     <!-- ─── Main config sections ─────────────────────────────────────────── -->
     <template v-else-if="loadState === 'idle'">
       <!-- ═══ Section 1: Webhook ═══════════════════════════════════════════ -->
-      <section class="config-card" aria-labelledby="tp-webhook-heading">
+      <section v-if="showSettings" class="config-card" aria-labelledby="tp-webhook-heading">
         <div class="card-head">
           <span class="card-icon" aria-hidden="true">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9">
@@ -492,6 +528,20 @@ const displayWebhookUrl = computed(() => {
             <span class="wk-label">{{ t('projectPanels.triggers.secretLabel') }}</span>
             <div class="secret-wrap">
               <span class="secret-masked mono" :aria-label="t('projectPanels.triggers.secretMaskedAria')">{{ webhookSecretMasked }}</span>
+              <button
+                class="btn-mini"
+                :class="{ 'btn-mini--copied': copiedTarget === 'currentSecret' }"
+                :disabled="revealingSecret"
+                :aria-label="copiedTarget === 'currentSecret' ? t('projectPanels.triggers.copied') : t('projectPanels.triggers.copyCurrentSecretAria')"
+                @click="copyCurrentSecret"
+              >
+                <template v-if="copiedTarget === 'currentSecret'">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>{{ t('projectPanels.triggers.copied') }}
+                </template>
+                <template v-else>
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>{{ t('projectPanels.triggers.copyCurrentSecret') }}
+                </template>
+              </button>
               <div v-if="revealedSecret" class="secret-reveal" role="status" aria-live="polite" :aria-label="t('projectPanels.triggers.secretRevealAria')">
                 <span class="secret-reveal-label">{{ t('projectPanels.triggers.secretNewLabel') }}</span>
                 <span class="secret-reveal-value mono">{{ revealedSecret }}</span>
@@ -515,6 +565,8 @@ const displayWebhookUrl = computed(() => {
                 </svg>
                 {{ t('projectPanels.triggers.reset') }}
               </button>
+              <p v-if="secretError" class="secret-hint secret-hint--error" role="alert">{{ secretError }}</p>
+              <p class="secret-hint">{{ t('projectPanels.triggers.secretHint') }}</p>
             </div>
           </div>
           <div class="webhook-row">
@@ -525,7 +577,7 @@ const displayWebhookUrl = computed(() => {
       </section>
 
       <!-- ═══ Section 2: Trigger events ════════════════════════════════════ -->
-      <section class="config-card" aria-labelledby="tp-events-heading">
+      <section v-if="showSettings" class="config-card" aria-labelledby="tp-events-heading">
         <div class="card-head">
           <span class="card-icon" aria-hidden="true">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9">
@@ -589,7 +641,7 @@ const displayWebhookUrl = computed(() => {
       </section>
 
       <!-- ═══ Section 3: Branch mappings ═══════════════════════════════════ -->
-      <section class="config-card" aria-labelledby="tp-mappings-heading">
+      <section v-if="showRules" class="config-card" aria-labelledby="tp-mappings-heading">
         <div class="card-head">
           <span class="card-icon" aria-hidden="true">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9">
@@ -682,7 +734,7 @@ const displayWebhookUrl = computed(() => {
       </section>
 
       <!-- ═══ Section 4: Unmatched policy ══════════════════════════════════ -->
-      <section class="config-card" aria-labelledby="tp-policy-heading">
+      <section v-if="showRules" class="config-card" aria-labelledby="tp-policy-heading">
         <div class="card-head">
           <span class="card-icon" aria-hidden="true">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9">
@@ -725,7 +777,7 @@ const displayWebhookUrl = computed(() => {
       </section>
 
       <!-- ═══ Section 5: Path filter (monorepo · P0) ══════════════════════ -->
-      <section class="config-card" aria-labelledby="tp-paths-heading">
+      <section v-if="showRules" class="config-card" aria-labelledby="tp-paths-heading">
         <div class="card-head">
           <span class="card-icon" aria-hidden="true">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9">
@@ -764,19 +816,19 @@ const displayWebhookUrl = computed(() => {
       </section>
 
       <!-- ═══ Scheduled (cron) trigger · Story 8-6 ════════════════════════════ -->
-      <CronPanel :project-id="props.projectId" />
+      <CronPanel v-if="showSettings" :project-id="props.projectId" />
 
       <!-- ═══ Typed run parameters · P0 ════════════════════════════════════ -->
-      <ParametersPanel :project-id="props.projectId" />
+      <ParametersPanel v-if="showSettings" :project-id="props.projectId" />
 
       <!-- ═══ Concurrency limit · Story 8-10 / FR-8-10 ═════════════════════ -->
-      <ConcurrencyPanel :project-id="props.projectId" />
+      <ConcurrencyPanel v-if="showRules" :project-id="props.projectId" />
 
       <!-- ═══ Downstream chaining · Story 8-11 / FR-8-11 ═════════════════════ -->
-      <ChainPanel :project-id="props.projectId" />
+      <ChainPanel v-if="showRules" :project-id="props.projectId" />
 
       <!-- 远程构建 runner(FR-8-14 续) -->
-      <RunnerPanel :project-id="props.projectId" />
+      <RunnerPanel v-if="showSettings" :project-id="props.projectId" />
     </template>
   </div>
 
@@ -861,6 +913,9 @@ const displayWebhookUrl = computed(() => {
 .secret-reveal { width: 100%; display: flex; align-items: center; gap: 10px; padding: 9px 13px; background: var(--color-amber-soft); border: 1px solid var(--color-amber-line); border-radius: var(--rounded); flex-wrap: wrap; }
 .secret-reveal-label { font-size: 0.74rem; font-weight: 600; color: var(--color-amber); white-space: nowrap; }
 .secret-reveal-value { flex: 1; font-size: 0.79rem; color: var(--color-text); word-break: break-all; }
+/* 密钥用途说明/错误行:.secret-wrap 是 flex wrap,写明 width:100% 才能独占一行。 */
+.secret-hint { width: 100%; margin: 0; font-size: var(--text-label); color: var(--color-faint); line-height: 1.5; }
+.secret-hint--error { color: var(--color-amber); }
 .btn-mini { height: 38px; border: 1px solid var(--color-border-strong); background: var(--color-card-2); color: var(--color-text); font-size: 0.79rem; font-family: var(--font-sans); font-weight: 500; border-radius: var(--rounded); padding: 0 13px; cursor: pointer; white-space: nowrap; display: inline-flex; align-items: center; gap: 5px; flex-shrink: 0; transition: border-color var(--duration-fast), color var(--duration-fast), background-color var(--duration-fast); }
 .btn-mini:hover:not(:disabled) { border-color: var(--color-faint); background: var(--color-inset); }
 .btn-mini:disabled { opacity: 0.45; cursor: not-allowed; }

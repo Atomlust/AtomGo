@@ -380,3 +380,54 @@ func readCipher(t *testing.T, db *sql.DB, projID string) []byte {
 	}
 	return c
 }
+
+// TestRevealSecretDoesNotRotate 验证 RevealSecret 回显当前生效密钥的明文且**不轮换**:
+// 连续两次 reveal 得到同一明文;reset 之后 reveal 才跟着变成新值。
+// 这是「UI 复制密钥」按钮的核心保证:取明文不能影响仓库里已配好的 webhook。
+func TestRevealSecretDoesNotRotate(t *testing.T) {
+	svc, _, _, projID := newSvc(t)
+	ctx := context.Background()
+
+	// 惰性生成默认配置(token + 加密密钥)。
+	if _, err := svc.Get(ctx, projID); err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+
+	first, err := svc.RevealSecret(ctx, projID)
+	if err != nil {
+		t.Fatalf("RevealSecret: %v", err)
+	}
+	if !strings.HasPrefix(first.Secret, secretPrefix) {
+		t.Fatalf("回显密钥应带 %s 前缀, got %q", secretPrefix, first.Secret)
+	}
+	if strings.Contains(first.Secret, "••••") {
+		t.Fatalf("回显必须是明文,不得为掩码: %q", first.Secret)
+	}
+	if first.Masked == first.Secret {
+		t.Fatal("掩码不应等于明文")
+	}
+
+	again, err := svc.RevealSecret(ctx, projID)
+	if err != nil {
+		t.Fatalf("reveal again: %v", err)
+	}
+	if again.Secret != first.Secret {
+		t.Fatalf("reveal 不得轮换密钥: 首次 %q, 再次 %q", first.Secret, again.Secret)
+	}
+
+	// 重置后才应换成新值。
+	rotated, err := svc.ResetSecret(ctx, projID)
+	if err != nil {
+		t.Fatalf("ResetSecret: %v", err)
+	}
+	if rotated.Secret == first.Secret {
+		t.Fatal("reset 后密钥应当改变")
+	}
+	after, err := svc.RevealSecret(ctx, projID)
+	if err != nil {
+		t.Fatalf("reveal after reset: %v", err)
+	}
+	if after.Secret != rotated.Secret {
+		t.Fatalf("reveal 应回显 reset 后的新值: got %q, want %q", after.Secret, rotated.Secret)
+	}
+}

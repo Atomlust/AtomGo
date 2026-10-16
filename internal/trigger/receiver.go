@@ -55,6 +55,11 @@ const (
 	IgnoredPathNoMatch = "path_no_match"
 	// IgnoredUnmatchedRecorded:未匹配但策略=record——本期记录一次「已记录未部署」,不创建可执行运行。
 	IgnoredUnmatchedRecorded = "unmatched_recorded"
+	// IgnoredUnsupportedEvent:该投递的事件名不属于本系统支持的四类(如 GitHub 的 issues)。
+	IgnoredUnsupportedEvent = "unsupported_event"
+	// IgnoredPRActionIgnored:PR/MR 的元数据型 action(改标签/指派/改描述/关闭等),
+	// 代码未变更,按 action 白名单忽略。
+	IgnoredPRActionIgnored = "pr_action_ignored"
 )
 
 // 接收层错误。错误体永不含密钥明文/密文/master key。
@@ -91,9 +96,16 @@ type Result struct {
 // RawBody 是验签所需的原始字节(签名模式按 Gitee 文档对 timestamp+"\n"+secret 计算,
 // 不依赖 body;但 body 仍用于解析事件)。
 type Delivery struct {
-	Token      string
-	Event      string
-	TokenHdr   string // X-Gitee-Token 头(密码模式=明文密钥;签名模式=base64 HMAC)
+	Token string
+	// Event 是平台**原生**事件名(如 Gitee「Push Hook」、GitHub「push」);
+	// 内部判定前须经 resolveEvent 归一化为四类内部事件。
+	Event string
+	// Provider 是来源平台(gitee/github/gitlab/gitea);空值按 Gitee 既有语义处理(向后兼容)。
+	Provider Provider
+	// TokenHdr 承载「明文或派生 token 头」:Gitee 的 X-Gitee-Token、GitLab 的 X-Gitlab-Token。
+	TokenHdr string
+	// Signature 承载「十六进制 HMAC 头」:GitHub 的 X-Hub-Signature-256、Gitea 的 X-Gitea-Signature。
+	Signature  string
 	Timestamp  string
 	DeliveryID string
 	RawBody    []byte
@@ -130,7 +142,8 @@ func (rc *Receiver) Handle(ctx context.Context, d Delivery) (*Result, error) {
 	// 解密后的明文密钥用完即清零(防驻留)。
 	defer zero(secret)
 
-	mode, ok := verifySignature(d, secret)
+	// 按来源平台分派:Gitee 走既有路径(行为不变),其余平台按各自的签名契约校验。
+	mode, ok := verifySignatureFor(d.Provider, d, secret)
 	if !ok {
 		return nil, ErrUnauthorized
 	}
@@ -140,8 +153,10 @@ func (rc *Receiver) Handle(ctx context.Context, d Delivery) (*Result, error) {
 		return nil, ErrUnauthorized
 	}
 
-	// 解析事件 → 是否订阅。
-	subscribed := eventSubscribed(d.Event, cfg.Events)
+	// 平台原生事件名 → 内部四类事件(PR/MR 的 action 白名单在 resolveEvent 内一并处理)。
+	// 此处只算出结果与跳过原因,实际判定放在去重(claim)之后,以保持
+	// 「所有路径都先抢占同一去重记录」这一既有不变量。
+	internalEvent, skipReason := resolveEvent(d.Provider, d.Event, d.RawBody)
 	parsed := parsePayload(d.RawBody)
 
 	// 去重键:优先 X-Gitee-Delivery;缺失时回退 event+branch+commit 派生键。
@@ -161,6 +176,14 @@ func (rc *Receiver) Handle(ctx context.Context, d Delivery) (*Result, error) {
 		return &Result{Accepted: false, Ignored: IgnoredDuplicate}, nil
 	}
 
+	// 不支持的事件名 / PR 元数据型 action(改标签、指派 review、改描述、关闭等)→ 忽略。
+	// 去重记录已抢占,故仍写 outcome:用户问「配了为什么没触发」时可直接查到原因。
+	if skipReason != "" {
+		rc.setOutcome(ctx, recID, skipReason)
+		return &Result{Accepted: false, Ignored: skipReason}, nil
+	}
+
+	subscribed := eventSubscribed(internalEvent, cfg.Events)
 	if !subscribed {
 		rc.setOutcome(ctx, recID, IgnoredEventNotSubscribed)
 		return &Result{Accepted: false, Ignored: IgnoredEventNotSubscribed}, nil
@@ -189,7 +212,7 @@ func (rc *Receiver) Handle(ctx context.Context, d Delivery) (*Result, error) {
 	runID, err := rc.runner.CreateWebhookRun(ctx, cfg.ProjectID, RunRequest{
 		Branch:                  parsed.Branch,
 		Commit:                  parsed.Commit,
-		Actor:                   "gitee",
+		Actor:                   actorFor(d.Provider),
 		ResolvedEnvironment:     mapping.Environment,
 		ResolvedTargetServerIDs: mapping.TargetServerIDs,
 	})
@@ -366,8 +389,17 @@ func verifySignature(d Delivery, secret []byte) (string, bool) {
 func timestampFresh(raw, mode string) bool {
 	ts := strings.TrimSpace(raw)
 	if ts == "" {
-		// 签名模式必须带 timestamp(否则重放窗口失效);密码模式允许缺失。
-		return mode == modePassword
+		// 契约本身不带 timestamp 的模式一律放行:
+		//   - 密码模式(Gitee)/ token 模式(GitLab):平台不发 timestamp 头;
+		//   - body HMAC 模式(GitHub/Gitea):每次投递 body 不同,靠签名本身 +
+		//     deliveryID 去重防重放,时间窗判定无意义。
+		// 仍强制要求 timestamp 的只剩 Gitee 签名模式(modeSignature)。
+		switch mode {
+		case modePassword, modeToken, modeHMACBody:
+			return true
+		default:
+			return false
+		}
 	}
 	t, ok := parseEpoch(ts)
 	if !ok {

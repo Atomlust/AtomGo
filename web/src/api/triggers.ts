@@ -86,3 +86,12 @@ export async function saveTrigger(
 export async function resetSecret(projectId: string): Promise<SecretResetResult> {
   return http.post<SecretResetResult>(`/api/projects/${projectId}/trigger/secret/reset`)
 }
+
+/**
+ * Reveals the **currently active** secret without rotating it (unlike resetSecret).
+ * Use this when you just need to copy the existing secret into your Git host's
+ * webhook settings — already-configured webhooks keep working.
+ */
+export async function revealSecret(projectId: string): Promise<SecretResetResult> {
+  return http.post<SecretResetResult>(`/api/projects/${projectId}/trigger/secret/reveal`)
+}

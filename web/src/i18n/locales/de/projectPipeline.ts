@@ -7,7 +7,8 @@ export default {
   // ─── Tabs ───────────────────────────────────────────────────────
   tabCanvas: 'Pipeline-Leinwand',
   tabVars: 'Variablen & Cache',
-  tabTriggers: 'Auslöser & Regeln',
+  tabTriggerSettings: 'Trigger-Einstellungen',
+  tabDeployRules: 'Bereitstellungsregeln',
   tabEnvs: 'Umgebungen & Anmeldedaten',
   tabStripAria: 'Tabs der Pipeline-Konfiguration',
 

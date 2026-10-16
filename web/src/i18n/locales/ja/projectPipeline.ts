@@ -7,7 +7,8 @@ export default {
   // ─── タブ ───────────────────────────────────────────────────────
   tabCanvas: 'パイプラインキャンバス',
   tabVars: '変数とキャッシュ',
-  tabTriggers: 'トリガーとルール',
+  tabTriggerSettings: 'トリガー設定',
+  tabDeployRules: 'デプロイルール',
   tabEnvs: '環境と認証情報',
   tabStripAria: 'パイプライン設定タブ',
 

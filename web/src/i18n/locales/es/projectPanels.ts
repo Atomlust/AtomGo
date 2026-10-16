@@ -23,7 +23,7 @@ export default {
     patternIllegal: 'Contiene caracteres no permitidos; solo se permiten letras, dígitos, / - _ . * ? [ ]',
 
     webhookTitle: 'Conexión de Webhook',
-    webhookSub: 'Plataforma de código · Gitee',
+    webhookSub: 'Plataformas Git · Gitee / GitHub / GitLab / Gitea',
     endpointLabel: 'Endpoint receptor',
     copied: 'Copiado',
     copyUrlAria: 'Copiar URL del webhook',
@@ -34,10 +34,15 @@ export default {
     secretNewLabel: 'Clave nueva (solo esta vez)',
     copyNewSecretAria: 'Copiar clave nueva',
     copySecret: 'Copiar clave',
+    copyCurrentSecret: 'Copiar clave',
+    copyCurrentSecretAria: 'Copiar la clave de firma activa actualmente',
+    secretHint: 'Tu plataforma Git firma cada webhook con esta clave; AtomGo la verifica para confirmar que la petición procede realmente de tu repositorio y bloquear disparos falsificados. Haz clic en «Copiar clave» y pégala en el campo de clave o contraseña del webhook. «Restablecer» invalida la clave antigua al instante: actualízala también en la plataforma.',
+    errRevealGeneric: 'No se pudo leer la clave. Inténtalo de nuevo más tarde.',
+
     resetSecretAria: 'Restablecer clave de firma',
     reset: 'Restablecer',
     pushConfigLabel: 'Configuración de push',
-    pushConfigHint: 'En el repositorio de Gitee → Administrar → WebHooks, pega la dirección y la clave de arriba y marca los eventos Push / Tag Push / Release / Pull Request.',
+    pushConfigHint: 'Crea un webhook en cada plataforma con la URL y la clave anteriores: **todas las plataformas comparten la misma URL y clave**. Suscríbete a Push / Tag Push / Release / Pull Request (Merge Request). Nota: los pull requests solo se activan al crearlos, reabrirlos o al recibir nuevos commits; etiquetar o asignar revisores no activa nada.',
 
     eventsTitle: 'Eventos del Disparador',
     eventsSub: 'Elige qué eventos crean una ejecución de pipeline',
