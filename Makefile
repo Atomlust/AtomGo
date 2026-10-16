@@ -11,7 +11,7 @@ DATE    ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 VPKG    := github.com/atomlust/atomgo/internal/version
 LDFLAGS := -s -w -X $(VPKG).Version=$(VERSION) -X $(VPKG).Commit=$(COMMIT) -X $(VPKG).Date=$(DATE)
 
-.PHONY: all build embed-frontend go-build test vet fmt fmt-check mem-check dev run version clean
+.PHONY: all build embed-frontend go-build test vet fmt fmt-check mem-check dev run version clean check hooks
 
 all: build
 
@@ -43,6 +43,16 @@ fmt-check:
 ## mem-check: 断言平台常驻内存 ≤100MB(NFR-4)
 mem-check:
 	bash scripts/mem-check.sh
+
+## check: 推送前自检 —— gofmt + vet + 全量 test,范围与 CI 的 backend job 完全一致。
+## 之所以要「全量」:2026-10-17 曾因本地只跑部分包(漏了 internal/deploy)导致 CI 连红。
+check:
+	bash scripts/pre-push-check.sh
+
+## hooks: 安装 git pre-push 钩子,让每次 git push 自动跑 check(失败即阻止推送)。
+## .git/hooks 不入库,新克隆的机器上要再跑一次 make hooks。
+hooks:
+	bash scripts/install-hooks.sh
 
 ## dev: 本地开发(两个终端:Go API + Vite 热更代理)
 dev:
