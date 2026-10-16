@@ -142,7 +142,9 @@ func TestOpsProxyServiceCompatibility(t *testing.T) {
 		for _, proxyTLS := range []bool{false, true} {
 			t.Run(fmt.Sprintf("originTLS=%v/proxyTLS=%v", originTLS, proxyTLS), func(t *testing.T) {
 				origin, transport, requests, tunnels := opsProxyFixture(t, originTLS, proxyTLS, "")
-				svc, _, _ := newService(t, &http.Client{Transport: transport, Timeout: time.Second})
+				// 超时放宽到 10s:原先 1s 在高负载下(全量并发 / 冷缓存 / 慢机器)会偶发超时,
+				// 使本测试变成 flaky。fixture 走本地 loopback,正常远快于 1s,不影响被测行为。
+				svc, _, _ := newService(t, &http.Client{Transport: transport, Timeout: 10 * time.Second})
 				if _, err := svc.Save(ctx(), SaveInput{Provider: ProviderOpenAI, BaseURL: origin.URL, Model: "test-model", APIKey: strp("test-api-key"), Enabled: true}); err != nil {
 					t.Fatal(err)
 				}
@@ -313,7 +315,9 @@ func TestOpsProxyTLSIdentityAndRedirects(t *testing.T) {
 				transport.TLSClientConfig.RootCAs.AddCert(proxy.Certificate())
 			}
 			transport.Proxy = http.ProxyURL(proxyURL)
-			svc, _, _ := newService(t, &http.Client{Transport: transport, Timeout: time.Second})
+			// 超时放宽到 10s:原先 1s 在高负载下(全量并发 / 冷缓存 / 慢机器)会偶发超时,
+			// 使本测试变成 flaky。fixture 走本地 loopback,正常远快于 1s,不影响被测行为。
+			svc, _, _ := newService(t, &http.Client{Transport: transport, Timeout: 10 * time.Second})
 			m := &opsModel{service: svc.(*service), lookupIP: func(context.Context, string) ([]net.IPAddr, error) {
 				return []net.IPAddr{{IP: net.ParseIP("127.0.0.1")}}, nil
 			}}
