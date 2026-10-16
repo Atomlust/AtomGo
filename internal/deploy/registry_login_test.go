@@ -123,10 +123,21 @@ func TestSettingsRegistryResolverResolve(t *testing.T) {
 		t.Fatalf("creds = %+v", creds)
 	}
 
-	// 2) 环境名未命中但主机匹配 → 回退命中。
+	// 2) 环境名已解析但不匹配 → **不**借用其它环境的凭据。
+	//    刻意的安全加固:环境名写错/环境未绑定时,宁可跳过自动登录(沿用目标机既有登录),
+	//    也不悄悄拿别的环境凭据去登,避免登错仓库(详见 registry_login.go 的 Resolve)。
 	creds, err = r.Resolve(ctx, projID, "nonexistent", "docker.atomlust.com")
+	if err != nil || creds != nil {
+		t.Fatalf("环境名未匹配时不应借用其它环境凭据: creds=%v err=%v", creds, err)
+	}
+
+	// 2b) 环境名未解析(手动触发等,envName 为空)且主机匹配 → 回退命中。
+	creds, err = r.Resolve(ctx, projID, "", "docker.atomlust.com")
 	if err != nil || creds == nil {
-		t.Fatalf("fallback resolve: creds=%v err=%v", creds, err)
+		t.Fatalf("envName 为空时应回退命中: creds=%v err=%v", creds, err)
+	}
+	if creds.Host != "docker.atomlust.com" || creds.Username != "alice" || creds.Password != "s3cr3t" {
+		t.Fatalf("fallback creds = %+v", creds)
 	}
 
 	// 3) 无凭据绑定的项目 → nil(跳过)。

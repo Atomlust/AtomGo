@@ -63,9 +63,8 @@ func (r *settingsRegistryResolver) Resolve(ctx context.Context, projectID, envNa
 	if err != nil || st == nil {
 		return nil, nil // 解析失败 → 跳过自动登录,不阻断部署
 	}
-	// 先按环境名精确定位;未命中(如手动触发未解析环境)→ 回退到「主机匹配 refHost」的环境。
+	// 先按环境名精确定位;未命中且环境名未解析(如手动触发)→ 回退到「主机匹配 refHost」的环境。
 	var reg *pipeline.ImageRegistry
-	matchedByName := false
 	for i := range st.Environments {
 		e := &st.Environments[i]
 		if strings.TrimSpace(e.ImageRegistry.CredentialID) == "" || strings.TrimSpace(e.ImageRegistry.URL) == "" {
@@ -73,7 +72,6 @@ func (r *settingsRegistryResolver) Resolve(ctx context.Context, projectID, envNa
 		}
 		if e.Name == envName {
 			reg = &e.ImageRegistry
-			matchedByName = true
 			break
 		}
 		// 仅当环境名未解析(手动触发等)时才回退到「主机匹配 refHost」的环境;
@@ -87,10 +85,6 @@ func (r *settingsRegistryResolver) Resolve(ctx context.Context, projectID, envNa
 			log.Printf("[deploy] 自动登录:环境 %q 未匹配到绑定镜像仓库凭据,跳过自动登录(不借用其它环境凭据)", envName)
 		}
 		return nil, nil
-	}
-	if !matchedByName && envName != "" {
-		// 环境名未精确匹配却借用了其它环境凭据 —— 典型配置错位,显式告警。
-		log.Printf("[deploy] 自动登录:环境 %q 未精确匹配,回退借用环境(主机 %s)的镜像仓库凭据", envName, hostOfRegistry(reg.URL))
 	}
 	secret, err := r.vault.Reveal(reg.CredentialID)
 	if err != nil || secret == "" {
