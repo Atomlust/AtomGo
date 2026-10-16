@@ -254,6 +254,9 @@ function buildSettingsPayload(): SaveSettingsInput | null {
         credentialId: e.imageRegistry.credentialId || undefined,
       },
       channelTag: e.channelTag,
+      containerName: e.containerName || undefined,
+      ports: e.ports || undefined,
+      runArgs: e.runArgs || undefined,
     })),
   }
 }

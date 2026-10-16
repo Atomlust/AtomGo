@@ -157,6 +157,13 @@ type Environment struct {
 	// 额外把同一 digest 打一个 <image>:<channelTag> 并推送,供外部拉取/回滚用一个稳定引用
 	// (不可变 commit tag 之外的运动通道)。空=不推通道 tag。建议填环境名(如 prod/staging)。
 	ChannelTag string `json:"channelTag,omitempty"`
+	// ContainerName 是本环境部署(docker run --name)使用的容器名。非空时晋级 / 部署以该名起容器,
+	// 否则回退为镜像名 sanitize。用于同一台机器上多环境以不同容器名共存(如 dev/prod 互不覆盖)。
+	ContainerName string `json:"containerName,omitempty"`
+	// Ports 是本环境部署时的端口映射(逗号 / 空白分隔,每项 "host:container"),透传为 docker run -p。
+	Ports string `json:"ports,omitempty"`
+	// RunArgs 是本环境部署时 docker run 的附加参数(引号感知切分),如 --restart / -v / --network。
+	RunArgs string `json:"runArgs,omitempty"`
 }
 
 // PipelineStep 是一条自定义脚本步骤(Epic 8 地基 · Story 8-1)。**冻结 DTO**:前端按此对接。
@@ -588,6 +595,9 @@ func (s *settingsService) normalizeEnvironments(in []Environment) ([]Environment
 			EnvVars:         envVars,
 			ImageRegistry:   registry,
 			ChannelTag:      channelTag,
+			ContainerName:   strings.TrimSpace(e.ContainerName),
+			Ports:           strings.TrimSpace(e.Ports),
+			RunArgs:         strings.TrimSpace(e.RunArgs),
 		})
 	}
 	return out, nil
@@ -853,6 +863,9 @@ type storedEnvironment struct {
 	EnvVars         []storedVar    `json:"envVars"`
 	ImageRegistry   storedRegistry `json:"imageRegistry"`
 	ChannelTag      string         `json:"channelTag,omitempty"`
+	ContainerName   string         `json:"containerName,omitempty"`
+	Ports           string         `json:"ports,omitempty"`
+	RunArgs         string         `json:"runArgs,omitempty"`
 }
 
 type storedStep struct {
@@ -922,7 +935,10 @@ func toStoredEnvironments(in []Environment) []storedEnvironment {
 				URL:          e.ImageRegistry.URL,
 				CredentialID: e.ImageRegistry.CredentialID,
 			},
-			ChannelTag: e.ChannelTag,
+			ChannelTag:    e.ChannelTag,
+			ContainerName: e.ContainerName,
+			Ports:         e.Ports,
+			RunArgs:       e.RunArgs,
 		})
 	}
 	return out

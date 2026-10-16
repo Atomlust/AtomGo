@@ -18,6 +18,8 @@ package promotion
 import (
 	"errors"
 	"strings"
+
+	"github.com/atomlust/atomgo/internal/pipeline"
 )
 
 // 晋级记录状态枚举(DB 存小写串)。
@@ -69,6 +71,26 @@ type EnvStage struct {
 	// Approvers 是 gated 环境的审批人名单(对齐 GitHub required reviewers /
 	// GitLab Allowed-to-deploy)。为空表示不限定身份(向后兼容)。
 	Approvers []string `json:"approvers,omitempty"`
+}
+
+// DeployConfigForEnvironment 把环境的逐环境部署参数(容器名 / 端口 / 运行参数)装配为部署用的
+// Config map(key 对齐 deploy/image_release.go 的 cfg["containerName"|"ports"|"runArgs"])。
+// 仅非空字段入参;空字段不入,沿用下游 image 部署的回退逻辑(容器名 sanitize 镜像名、无端口映射)。
+// 供晋级部署(promoteDeploy)把「逐环境」的 docker run 参数透传到 deploy.DeployInput.Config,
+// 使同一环境的所有目标机统一使用该容器名 / 端口 / 附加参数(这正是单机上 dev/prod 以不同容器名
+// 共存、以及多机 fleet 同名部署所需)。
+func DeployConfigForEnvironment(e pipeline.Environment) map[string]string {
+	cfg := map[string]string{}
+	if c := strings.TrimSpace(e.ContainerName); c != "" {
+		cfg["containerName"] = c
+	}
+	if p := strings.TrimSpace(e.Ports); p != "" {
+		cfg["ports"] = p
+	}
+	if r := strings.TrimSpace(e.RunArgs); r != "" {
+		cfg["runArgs"] = r
+	}
+	return cfg
 }
 
 // Chain 是某项目的有序环境链(index 0 为链首,如 dev)。

@@ -303,6 +303,12 @@ func promoteDeploy(ctx context.Context, runs run.Service, deploySvc deploy.Servi
 	if len(servers) == 0 {
 		return "", nil, errPromoteNoTargetServers
 	}
+	// 取目标环境完整配置(含逐环境部署参数:容器名 / 端口 / 运行参数),透传到部署 Config,
+	// 使该环境所有目标机统一使用同一套 docker run 参数(单机能 dev/prod 共存、多机 fleet 同名部署)。
+	envCfg, err := pstore.GetEnvironment(ctx, projectID, env)
+	if err != nil {
+		return "", nil, err
+	}
 	arts, err := runs.ListArtifacts(ctx, sourceRunID)
 	if err != nil {
 		return "", nil, err
@@ -341,6 +347,7 @@ func promoteDeploy(ctx context.Context, runs run.Service, deploySvc deploy.Servi
 		RecordRunID: recRunID,
 		EnvFile:     envFile,
 		ImageRef:    imageRef,
+		Config:      promotion.DeployConfigForEnvironment(envCfg),
 	})
 	if err != nil {
 		return recRunID, nil, err

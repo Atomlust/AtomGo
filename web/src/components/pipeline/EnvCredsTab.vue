@@ -64,6 +64,12 @@ interface EnvRow {
   registryCredentialId: string
   /** Moving channel tag pushed alongside the commit tag on successful build (empty = disabled). */
   channelTag: string
+  /** Per-environment container name for promotion deploy (docker run --name). */
+  containerName: string
+  /** Per-environment port mappings (comma/space separated). */
+  ports: string
+  /** Per-environment extra docker run args. */
+  runArgs: string
 }
 
 function toEnvRow(e: Environment): EnvRow {
@@ -80,6 +86,9 @@ function toEnvRow(e: Environment): EnvRow {
     registryUrl: e.imageRegistry.url,
     registryCredentialId: e.imageRegistry.credentialId ?? '',
     channelTag: e.channelTag ?? '',
+    containerName: e.containerName ?? '',
+    ports: e.ports ?? '',
+    runArgs: e.runArgs ?? '',
   }
 }
 
@@ -137,6 +146,9 @@ function compose(): Environment[] {
       credentialId: e.registryCredentialId || undefined,
     },
     channelTag: e.channelTag.trim() || undefined,
+    containerName: e.containerName.trim() || undefined,
+    ports: e.ports.trim() || undefined,
+    runArgs: e.runArgs.trim() || undefined,
   }))
 }
 
@@ -163,6 +175,9 @@ function envsKey(list: Environment[]): string {
       registryUrl: e.imageRegistry.url.trim(),
       registryCredentialId: e.imageRegistry.credentialId || '',
       channelTag: (e.channelTag ?? '').trim(),
+      containerName: (e.containerName ?? '').trim(),
+      ports: (e.ports ?? '').trim(),
+      runArgs: (e.runArgs ?? '').trim(),
     })),
   )
 }
@@ -214,6 +229,9 @@ function addEnv(): void {
     registryUrl: '',
     registryCredentialId: '',
     channelTag: '',
+    containerName: '',
+    ports: '',
+    runArgs: '',
   })
 }
 
@@ -488,6 +506,53 @@ function maskFor(row: VarRow): string {
               <p class="reg-channel-desc">{{ t('pipelinePanels.envChannelTagHint') }}</p>
             </div>
           </div>
+
+          <!-- per-environment deploy params (container name / ports / run args) -->
+          <div class="eg eg-deploy">
+            <div class="eg-l">
+              {{ t('pipelinePanels.envDeployParams') }}
+              <span class="eg-hint">{{ t('pipelinePanels.envDeployParamsHint') }}</span>
+            </div>
+            <div class="dep-grid">
+              <label class="dep-field">
+                <span class="dep-label">{{ t('pipelinePanels.envContainerName') }}</span>
+                <input
+                  v-model="env.containerName"
+                  class="ev-v mono"
+                  type="text"
+                  :placeholder="t('pipelinePanels.envContainerNamePlaceholder')"
+                  :aria-label="t('pipelinePanels.envContainerName')"
+                  :disabled="disabled"
+                >
+              </label>
+              <label class="dep-field">
+                <span class="dep-label">{{ t('pipelinePanels.envPorts') }}</span>
+                <input
+                  v-model="env.ports"
+                  class="ev-v mono"
+                  type="text"
+                  :placeholder="t('pipelinePanels.envPortsPlaceholder')"
+                  :aria-label="t('pipelinePanels.envPorts')"
+                  :disabled="disabled"
+                >
+              </label>
+              <label class="dep-field dep-field--wide">
+                <span class="dep-label">{{ t('pipelinePanels.envRunArgs') }}</span>
+                <input
+                  v-model="env.runArgs"
+                  class="ev-v mono"
+                  type="text"
+                  :placeholder="t('pipelinePanels.envRunArgsPlaceholder')"
+                  :aria-label="t('pipelinePanels.envRunArgs')"
+                  :disabled="disabled"
+                >
+              </label>
+            </div>
+            <p class="dep-warn">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
+              {{ t('pipelinePanels.envDeployParamsEmptyHint') }}
+            </p>
+          </div>
         </div>
       </article>
     </section>
@@ -650,6 +715,16 @@ function maskFor(row: VarRow): string {
 .reg-channel { display: flex; flex-direction: column; align-items: stretch; gap: 7px; margin-top: 12px; }
 .reg-channel-input { max-width: 280px; width: 100%; }
 .reg-channel-desc { margin: 0; font-size: 0.74rem; color: var(--color-faint); line-height: 1.5; }
+
+/* ─── Per-environment deploy params ───────────────────────────────── */
+.eg-deploy { grid-column: 1 / -1; }
+.dep-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; }
+.dep-field { display: flex; flex-direction: column; gap: 5px; }
+.dep-field--wide { grid-column: 1 / -1; }
+.dep-warn { display: flex; align-items: flex-start; gap: 6px; margin: 9px 0 0; font-size: 0.72rem; line-height: 1.55; color: var(--color-warning, #854F0B); }
+.dep-warn svg { flex: none; margin-top: 1px; }
+.dep-label { font-size: 0.72rem; font-weight: 500; color: var(--color-dim); }
+@media (max-width: 760px) { .dep-grid { grid-template-columns: 1fr; } }
 @media (max-width: 760px) { .env-body { grid-template-columns: 1fr; } .reg-grid { grid-template-columns: 1fr; } .evar-row { grid-template-columns: 1fr; } }
 
 .addrow { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 2px; }

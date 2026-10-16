@@ -230,6 +230,67 @@ func TestGetChainUnknownProject(t *testing.T) {
 	}
 }
 
+// ---- 逐环境部署参数(路径 B)单测 ---------------------------------------------
+
+func TestDeployConfigForEnvironment(t *testing.T) {
+	// 全空 → 空 map(沿用下游回退:容器名 sanitize 镜像名、无 -p 端口)。
+	if got := DeployConfigForEnvironment(pipeline.Environment{}); len(got) != 0 {
+		t.Fatalf("empty env → empty config, got %v", got)
+	}
+	// 全填 → 三项 key 齐备且 trim 首尾空白。
+	cfg := DeployConfigForEnvironment(pipeline.Environment{
+		ContainerName: " atomupdate-web ",
+		Ports:         "8001:8080, 9000:9000",
+		RunArgs:       "--restart unless-stopped",
+	})
+	if cfg["containerName"] != "atomupdate-web" {
+		t.Errorf("containerName not trimmed: %q", cfg["containerName"])
+	}
+	if cfg["ports"] != "8001:8080, 9000:9000" {
+		t.Errorf("ports mismatch: %q", cfg["ports"])
+	}
+	if cfg["runArgs"] != "--restart unless-stopped" {
+		t.Errorf("runArgs mismatch: %q", cfg["runArgs"])
+	}
+	// 部分填 → 只含非空 key。
+	partial := DeployConfigForEnvironment(pipeline.Environment{ContainerName: "dev"})
+	if len(partial) != 1 || partial["containerName"] != "dev" {
+		t.Errorf("partial mismatch: %v", partial)
+	}
+}
+
+func TestGetEnvironmentReturnsDeployParams(t *testing.T) {
+	st, db := testStore(t)
+	proj := seedProject(t, db)
+	seedChain(t, db, proj, []map[string]any{
+		{"id": "1", "name": "dev", "inChain": true, "gated": false, "targetServerIds": []string{"s1"}, "envVars": []any{}, "imageRegistry": map[string]any{}, "containerName": "atomupdate-dev", "ports": "7001:8080", "runArgs": "--restart unless-stopped"},
+		{"id": "2", "name": "prod", "inChain": true, "gated": true, "targetServerIds": []string{"s1"}, "envVars": []any{}, "imageRegistry": map[string]any{}, "containerName": "atomupdate-web", "ports": "8001:8080", "runArgs": "-v /data/app:/data/app"},
+	})
+	ctx := context.Background()
+	dev, err := st.GetEnvironment(ctx, proj, "dev")
+	if err != nil {
+		t.Fatalf("GetEnvironment dev: %v", err)
+	}
+	if dev.ContainerName != "atomupdate-dev" || dev.Ports != "7001:8080" || dev.RunArgs != "--restart unless-stopped" {
+		t.Errorf("dev deploy params mismatch: %+v", dev)
+	}
+	prod, err := st.GetEnvironment(ctx, proj, "prod")
+	if err != nil {
+		t.Fatalf("GetEnvironment prod: %v", err)
+	}
+	if prod.ContainerName != "atomupdate-web" || prod.Ports != "8001:8080" || prod.RunArgs != "-v /data/app:/data/app" {
+		t.Errorf("prod deploy params mismatch: %+v", prod)
+	}
+	// 不存在的环境 → 零值,不报错(与 EnvironmentTargets 一致)。
+	missing, err := st.GetEnvironment(ctx, proj, "nope")
+	if err != nil {
+		t.Fatalf("GetEnvironment missing: %v", err)
+	}
+	if missing.ContainerName != "" || missing.Name != "" {
+		t.Errorf("missing env should be zero value, got %+v", missing)
+	}
+}
+
 // ---- 编排状态机单测 ---------------------------------------------------------
 
 func TestPromoteRejectsNonSuccessfulRun(t *testing.T) {

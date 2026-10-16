@@ -75,6 +75,12 @@ export interface Environment {
   imageRegistry: ImageRegistry
   /** Moving channel tag pushed alongside the immutable commit tag on successful build (empty = disabled). */
   channelTag?: string
+  /** Per-environment container name for promotion deploy (docker run --name). Empty → image-name fallback. */
+  containerName?: string
+  /** Per-environment port mappings (comma/space separated, each "host:container") → docker run -p. */
+  ports?: string
+  /** Per-environment extra docker run args (quote-aware split), e.g. --restart / -v / --network. */
+  runArgs?: string
 }
 
 export interface SettingsDTO {
@@ -109,6 +115,9 @@ export interface SaveEnvironment {
   envVars: SaveBuildVar[]
   imageRegistry: SaveImageRegistry
   channelTag?: string
+  containerName?: string
+  ports?: string
+  runArgs?: string
 }
 
 export interface SaveSettingsInput {

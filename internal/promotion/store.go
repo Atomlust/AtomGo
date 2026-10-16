@@ -61,6 +61,22 @@ func (s *Store) EnvironmentTargets(ctx context.Context, projectID, env string) (
 	return nil, nil
 }
 
+// GetEnvironment 返回某环境完整配置(含逐环境部署参数 ContainerName/Ports/RunArgs)。
+// 环境不存在 → (pipeline.Environment{}, nil)(与 EnvironmentTargets 一致,不报错)。
+// 项目不存在 → 透传错误(上层映射 404)。
+func (s *Store) GetEnvironment(ctx context.Context, projectID, env string) (pipeline.Environment, error) {
+	st, err := s.settings.Get(ctx, projectID)
+	if err != nil {
+		return pipeline.Environment{}, err
+	}
+	for _, e := range st.Environments {
+		if e.Name == env {
+			return e, nil
+		}
+	}
+	return pipeline.Environment{}, nil
+}
+
 // currentEnvForRun 返回某源运行已晋级到的「最高」环境(按链序)。
 // 无任何 promoted 记录 → 空串(尚未晋级)。
 func (s *Store) currentEnvForRun(ctx context.Context, runID string, c Chain) (string, error) {
