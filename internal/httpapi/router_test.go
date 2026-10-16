@@ -86,3 +86,39 @@ func TestSPAFallback(t *testing.T) {
 		t.Fatalf("expected content-type on fallback")
 	}
 }
+
+// TestIndexHTMLNotHeuristicallyCached 验证 HTML 入口(根路径与 /index.html)都显式
+// 声明 no-cache。历史上只有 SPA 回退分支设了该头,而根路径走的是静态文件分支,
+// 导致浏览器启发式缓存旧 HTML、继续引用旧 chunk,表现为发版后页面无变化。
+func TestIndexHTMLNotHeuristicallyCached(t *testing.T) {
+	srv := httptest.NewServer(New(testWebFS(), nil))
+	t.Cleanup(srv.Close)
+
+	for _, path := range []string{"/", "/index.html"} {
+		resp, err := http.Get(srv.URL + path)
+		if err != nil {
+			t.Fatalf("GET %s: %v", path, err)
+		}
+		cc := resp.Header.Get("Cache-Control")
+		resp.Body.Close()
+		if cc != "no-cache" {
+			t.Fatalf("GET %s Cache-Control = %q, want %q", path, cc, "no-cache")
+		}
+	}
+}
+
+// TestAssetsImmutable 验证带内容哈希的构建产物仍可长期强缓存。
+func TestAssetsImmutable(t *testing.T) {
+	srv := httptest.NewServer(New(testWebFS(), nil))
+	t.Cleanup(srv.Close)
+
+	resp, err := http.Get(srv.URL + "/assets/app.js")
+	if err != nil {
+		t.Fatalf("GET asset: %v", err)
+	}
+	defer resp.Body.Close()
+	want := "public, max-age=31536000, immutable"
+	if cc := resp.Header.Get("Cache-Control"); cc != want {
+		t.Fatalf("Cache-Control = %q, want %q", cc, want)
+	}
+}

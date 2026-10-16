@@ -1187,8 +1187,15 @@ func spaHandler(webFS fs.FS) http.Handler {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 
 		if info, err := fs.Stat(webFS, name); err == nil && !info.IsDir() {
-			if strings.HasPrefix(name, "assets/") {
+			switch {
+			case strings.HasPrefix(name, "assets/"):
+				// 带内容哈希的构建产物:可长期强缓存,内容变则 URL 变。
 				w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+			case name == "index.html":
+				// HTML 入口绝不能启发式缓存:它引用的 chunk 名是内容哈希,
+				// 一旦浏览器留下旧 HTML,就会继续请求并命中旧 chunk,
+				// 表现为「发版后页面毫无变化」(曾实际踩坑)。
+				w.Header().Set("Cache-Control", "no-cache")
 			}
 			fileServer.ServeHTTP(w, r)
 			return
