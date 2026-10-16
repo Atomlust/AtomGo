@@ -827,14 +827,16 @@ onMounted(() => {
 
 .panel { min-height: 240px; }
 
-/* Card grid — bento-ish, depth via surface + shadow + hover lift */
+/* Card grid — bento-ish, depth via surface + shadow + hover lift。
+   宽屏下原 290px 最小列宽会挤出过多窄列(变量名/值被 ellipsis 截断),
+   改为「少列更宽」;min(420px,100%) 保证窄屏/小容器不横向溢出。 */
 .card-grid {
   list-style: none;
   margin: 0;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
-  gap: 1rem;
+  grid-template-columns: repeat(auto-fill, minmax(min(420px, 100%), 1fr));
+  gap: 0.9rem;
 }
 
 .tpl-card,
@@ -842,8 +844,8 @@ onMounted(() => {
 .cn-card {
   display: flex;
   flex-direction: column;
-  gap: 0.7rem;
-  padding: 1.15rem 1.25rem;
+  gap: 0.6rem;
+  padding: 1rem 1.1rem;
   background: var(--color-card);
   border: 1px solid var(--color-border);
   border-radius: 16px;
@@ -869,7 +871,10 @@ onMounted(() => {
 .vg-name,
 .cn-name {
   margin: 0;
-  font-size: var(--text-h1);
+  /* min-width:0 让长标题在 flex 行内正常收缩并省略,而不是把右侧 pill 挤出去 */
+  min-width: 0;
+  flex: 1 1 auto;
+  font-size: 1.02rem;
   font-weight: 640;
   letter-spacing: -0.01em;
   color: var(--color-text);
@@ -892,7 +897,7 @@ onMounted(() => {
 .vg-desc,
 .cn-desc {
   margin: 0;
-  font-size: var(--text-body);
+  font-size: 0.8rem;
   color: var(--color-dim);
   line-height: 1.45;
   min-height: 1.2em;
@@ -912,18 +917,26 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 0.6rem;
-  font-size: var(--text-label);
+  font-size: 0.78rem;
   min-width: 0;
 }
 .cn-cfg-key {
-  flex-shrink: 0;
+  /* 不再无限撑开:超长 key 自身省略,保证 value 有足够横向空间 */
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 45%;
   font-family: var(--font-mono, ui-monospace, monospace);
   color: var(--color-text);
   background: var(--color-inset);
   padding: 0.1rem 0.4rem;
   border-radius: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .cn-cfg-val {
+  min-width: 0;
+  flex: 1 1 auto;
   color: var(--color-dim);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -981,25 +994,39 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 0.6rem;
-  font-size: var(--text-label);
+  font-size: 0.78rem;
+  min-width: 0;
 }
 .vg-var-key {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 45%;
   font-family: var(--font-mono, ui-monospace, monospace);
   color: var(--color-text);
   background: var(--color-inset);
   padding: 0.1rem 0.4rem;
   border-radius: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .vg-var-value {
+  min-width: 0;
+  flex: 1 1 auto;
   color: var(--color-dim);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .vg-var-secret {
+  min-width: 0;
+  flex: 1 1 auto;
   color: var(--color-amber);
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: var(--text-label);
+  font-size: 0.78rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .vg-var--more {
   color: var(--color-faint);
@@ -1120,8 +1147,8 @@ onMounted(() => {
 /* Skeleton */
 .skeleton-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
-  gap: 1rem;
+  grid-template-columns: repeat(auto-fill, minmax(min(420px, 100%), 1fr));
+  gap: 0.9rem;
 }
 .skeleton-card {
   height: 150px;
@@ -1146,7 +1173,8 @@ onMounted(() => {
   z-index: 50;
 }
 .modal {
-  width: min(620px, 100%);
+  /* 变量/参数 KV 行需要横向空间,放宽到 760px 让 key 与 value 都够用 */
+  width: min(760px, 100%);
   max-height: 88vh;
   overflow-y: auto;
   background: var(--color-card);
@@ -1198,7 +1226,12 @@ onMounted(() => {
 
 .var-rows { display: flex; flex-direction: column; gap: 0.5rem; }
 .var-row { display: flex; align-items: center; gap: 0.5rem; }
-.input--key { flex: 0 0 32%; font-family: var(--font-mono, ui-monospace, monospace); }
+.input--key {
+  /* 可收缩但保底 8rem,窄容器下不会把 value 输入框挤成 0 宽 */
+  flex: 0 1 32%;
+  min-width: 8rem;
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
 .input--val,
 .input--cred { flex: 1 1 auto; }
 .var-secret-toggle {
