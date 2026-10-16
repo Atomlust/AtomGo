@@ -16,6 +16,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"log"
 	"strings"
 
 	"github.com/atomlust/atomgo/internal/pipeline"
@@ -64,6 +65,7 @@ func (r *settingsRegistryResolver) Resolve(ctx context.Context, projectID, envNa
 	}
 	// 先按环境名精确定位;未命中(如手动触发未解析环境)→ 回退到「主机匹配 refHost」的环境。
 	var reg *pipeline.ImageRegistry
+	matchedByName := false
 	for i := range st.Environments {
 		e := &st.Environments[i]
 		if strings.TrimSpace(e.ImageRegistry.CredentialID) == "" || strings.TrimSpace(e.ImageRegistry.URL) == "" {
@@ -71,14 +73,24 @@ func (r *settingsRegistryResolver) Resolve(ctx context.Context, projectID, envNa
 		}
 		if e.Name == envName {
 			reg = &e.ImageRegistry
+			matchedByName = true
 			break
 		}
-		if reg == nil && hostOfRegistry(e.ImageRegistry.URL) == refHost {
+		// 仅当环境名未解析(手动触发等)时才回退到「主机匹配 refHost」的环境;
+		// 环境名已解析却不匹配 → 不再悄悄借用其它环境的凭据(避免登错仓库)。
+		if reg == nil && envName == "" && hostOfRegistry(e.ImageRegistry.URL) == refHost {
 			reg = &e.ImageRegistry // 回退候选
 		}
 	}
 	if reg == nil {
+		if envName != "" {
+			log.Printf("[deploy] 自动登录:环境 %q 未匹配到绑定镜像仓库凭据,跳过自动登录(不借用其它环境凭据)", envName)
+		}
 		return nil, nil
+	}
+	if !matchedByName && envName != "" {
+		// 环境名未精确匹配却借用了其它环境凭据 —— 典型配置错位,显式告警。
+		log.Printf("[deploy] 自动登录:环境 %q 未精确匹配,回退借用环境(主机 %s)的镜像仓库凭据", envName, hostOfRegistry(reg.URL))
 	}
 	secret, err := r.vault.Reveal(reg.CredentialID)
 	if err != nil || secret == "" {
@@ -88,11 +100,14 @@ func (r *settingsRegistryResolver) Resolve(ctx context.Context, projectID, envNa
 	if pass == "" {
 		return nil, nil
 	}
-	return &registryCreds{
+	creds := &registryCreds{
 		Host:     hostOfRegistry(reg.URL),
 		Username: user,
 		Password: pass,
-	}, nil
+	}
+	// 预登录诊断(绝不含口令):暴露「登哪个仓库 / 用哪个账号 / 来自哪个环境」,避免静默登错仓库。
+	log.Printf("[deploy] 自动登录镜像仓库:host=%s user=%s (环境 %q 绑定)", creds.Host, creds.Username, envName)
+	return creds, nil
 }
 
 // splitRegistrySecret 把 registry 凭据明文拆为 user / password:约定 "user:password";
@@ -169,7 +184,7 @@ func (s *service) loginRegistryForImage(ctx context.Context, srv *target.Server,
 
 // dockerLoginOnTarget 在目标机安全执行 docker login:
 //  1. 把口令经 stdin 写到目标机 /dev/shm 临时文件(target.Upload 走 RunWithStdin,口令不进 argv / 日志);
-//  2. `docker login -u <user> --password-stdin < 文件`(口令从文件读,绝不进 argv / ps / 日志);
+//  2. `docker login -u <user> --password-stdin <host> < 文件`(口令从文件读,绝不进 argv / ps / 日志;host 必须显式指定,否则 docker 默认登 Docker Hub);
 //  3. 登录后立即 rm 临时文件(尽力)。
 //
 // 返回 (msg, ok):ok=false 时 msg 为失败人读原因。
@@ -185,13 +200,16 @@ func (s *service) dockerLoginOnTarget(ctx context.Context, srv *target.Server, c
 	creds.Password = ""
 
 	// 2) 登录(口令经 --password-stdin 从文件读,绝不进 argv)。
-	script := fmt.Sprintf("docker login -u %s --password-stdin < %s", shellQuote(user), shellQuote(pwPath))
+	// 必须显式指定 registry 主机:docker login 不带 SERVER 时默认登录 Docker Hub(registry-1.docker.io),
+	// 会导致「想登 docker.atomlust.com 却去登 Docker Hub」而报 unauthorized。
+	script := fmt.Sprintf("docker login -u %s --password-stdin %s < %s", shellQuote(user), shellQuote(creds.Host), shellQuote(pwPath))
 	if out, e := s.exec(ctx, srv.ID, []string{"sh", "-c", script}); e != nil || (out != nil && out.ExitCode != 0) {
 		_, _ = s.exec(ctx, srv.ID, []string{"rm", "-f", pwPath}) // 3) 清理(尽力)
 		if e != nil {
 			return "镜像仓库登录失败:" + humanExecError(e), false
 		}
-		return "镜像仓库登录失败(凭据可能被吊销 / 权限不足):" + truncate(strings.TrimSpace(out.Stderr)), false
+		// 失败信息带出仓库主机与用户名(绝不含口令),便于定位是登错了哪个仓库 / 哪个账号。
+		return fmt.Sprintf("镜像仓库登录失败(仓库 %s 用户 %s,凭据可能被吊销 / 权限不足):%s", creds.Host, creds.Username, truncate(strings.TrimSpace(out.Stderr))), false
 	}
 
 	// 3) 清理临时文件(尽力;在 /dev/shm 内存,重启即失)。

@@ -418,7 +418,7 @@ onMounted(() => {
         :class="{ 'seg-item--active': tab === 'templates' }"
         @click="switchTab('templates')"
       >
-        {{ t('library.tabTemplates') }}
+        <span class="seg-label">{{ t('library.tabTemplates') }}</span>
         <span class="seg-count">{{ templates.length }}</span>
       </button>
       <button
@@ -428,7 +428,7 @@ onMounted(() => {
         :class="{ 'seg-item--active': tab === 'variableGroups' }"
         @click="switchTab('variableGroups')"
       >
-        {{ t('library.tabVariableGroups') }}
+        <span class="seg-label">{{ t('library.tabVariableGroups') }}</span>
         <span class="seg-count">{{ variableGroups.length }}</span>
       </button>
       <button
@@ -438,7 +438,7 @@ onMounted(() => {
         :class="{ 'seg-item--active': tab === 'customNodes' }"
         @click="switchTab('customNodes')"
       >
-        {{ t('library.tabCustomNodes') }}
+        <span class="seg-label">{{ t('library.tabCustomNodes') }}</span>
         <span class="seg-count">{{ customNodes.length }}</span>
       </button>
     </div>
@@ -776,9 +776,15 @@ onMounted(() => {
   font-size: var(--text-body);
 }
 
-/* Segmented control — intentional active state with sliding underline feel */
+/* Segmented control — intentional active state with sliding underline feel。
+   宽屏下用 inline-flex 自适应内容即可;但内容区被侧栏+内边距压窄时(约 <400px),
+   原 0.86rem 字号 + 1rem 左右内边距会让中文标签折成两行、整条控件被撑高。
+   改为:块级铺满(拉长)、三等分、字号降到 0.75rem、标签 nowrap 绝不折行;
+   仍放不下时标签自身省略(而不是折行把控件撑成两行)。 */
 .seg {
-  display: inline-flex;
+  display: flex;
+  width: 100%;
+  max-width: 32rem; /* 宽屏下不过度拉伸,保持紧凑 */
   gap: 0.25rem;
   padding: 0.25rem;
   background: var(--color-inset);
@@ -789,15 +795,19 @@ onMounted(() => {
 .seg-item {
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem 1rem;
+  justify-content: center;
+  gap: 0.35rem;
+  flex: 1 1 0; /* 三等分铺满 */
+  min-width: 0;
+  padding: 0.42rem 0.5rem;
   border: none;
   background: transparent;
   color: var(--color-dim);
-  font-size: var(--text-body);
+  font-size: 0.75rem; /* 原 var(--text-body)=0.86rem */
   font-weight: 560;
   border-radius: 9px;
   cursor: pointer;
+  white-space: nowrap;
   transition: color var(--duration-fast, 150ms), background var(--duration-fast, 150ms);
 }
 .seg-item:hover {
@@ -808,13 +818,20 @@ onMounted(() => {
   color: var(--color-text);
   box-shadow: var(--shadow);
 }
+.seg-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .seg-count {
   display: inline-grid;
   place-items: center;
-  min-width: 1.4rem;
-  height: 1.4rem;
-  padding: 0 0.4rem;
-  font-size: var(--text-caps);
+  flex: 0 0 auto;
+  min-width: 1.1rem;
+  height: 1.1rem;
+  padding: 0 0.3rem;
+  font-size: 0.68rem; /* 原 var(--text-caps)=0.71rem */
   font-weight: 640;
   color: var(--color-faint);
   background: var(--color-border);
