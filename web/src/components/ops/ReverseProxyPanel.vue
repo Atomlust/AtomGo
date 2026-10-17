@@ -935,17 +935,19 @@ function statusLabel(s: ProxyRoute['certStatus']): string {
             <NIcon :size="14"><Server /></NIcon>
             {{ caddyDeploying ? t('reverseProxy.caddy.deploying') : t('reverseProxy.caddy.deploy') }}
           </button>
+
+          <!-- 移除按钮与部署按钮同位(表单下方):已部署态的出口,先移除才能改资源 -->
+          <button
+            v-if="caddy.installed"
+            class="caddy__remove"
+            :disabled="caddyRemoving"
+            @click="removeEnv"
+          >
+            <NIcon :size="14"><CircleX /></NIcon>
+            {{ caddyRemoving ? t('reverseProxy.caddy.removing') : t('reverseProxy.caddy.remove') }}
+          </button>
         </div>
       </div>
-      <button
-        v-if="caddy.installed"
-        class="caddy__remove"
-        :disabled="caddyRemoving"
-        @click="removeEnv"
-      >
-        <NIcon :size="14"><CircleX /></NIcon>
-        {{ caddyRemoving ? t('reverseProxy.caddy.removing') : t('reverseProxy.caddy.remove') }}
-      </button>
     </div>
 
     <!-- 绑定表单 -->
@@ -1279,8 +1281,7 @@ function statusLabel(s: ProxyRoute['certStatus']): string {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  flex-shrink: 0;
-  align-self: center;
+  margin-top: 12px;
   font-size: var(--text-micro);
   font-weight: 600;
   padding: 6px 12px;
