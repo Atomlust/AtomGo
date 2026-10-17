@@ -1,9 +1,11 @@
 package httpapi
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -192,6 +194,8 @@ func writeProxyError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusBadRequest, "invalid_route", "请填写上游容器名")
 	case errors.Is(err, proxy.ErrInvalidContainer):
 		writeError(w, http.StatusBadRequest, "invalid_route", "上游容器名含非法字符")
+	case errors.Is(err, proxy.ErrInvalidCaddyResource):
+		writeError(w, http.StatusBadRequest, "invalid_caddy_resource", "托管反代资源名(网络/容器名)含非法字符:仅允许字母数字、点、下划线、连字符,且不能以连字符开头")
 	case errors.Is(err, proxy.ErrInvalidPort):
 		writeError(w, http.StatusBadRequest, "invalid_route", "上游端口必须在 1..65535 之间")
 	case errors.Is(err, proxy.ErrInvalidUpstreamKind):
@@ -574,16 +578,23 @@ func makeProxyModeHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		info := proxy.GetProxyModeInfo()
 		writeJSON(w, http.StatusOK, map[string]any{
-			"mode":        info.Mode,
-			"configPath":  info.ConfigPath,
-			"fragmentDir": info.FragmentDir,
-			"reloadCmd":   info.ReloadCmd,
+			"mode":                   info.Mode,
+			"configPath":             info.ConfigPath,
+			"fragmentDir":            info.FragmentDir,
+			"reloadCmd":              info.ReloadCmd,
+			"externalCaddyContainer": info.ExternalCaddyContainer,
+			"network":                info.Network,
+			"containerName":          info.ContainerName,
+			"dataVolume":             info.DataVolume,
+			"configVolume":           info.ConfigVolume,
 		})
 	}
 }
 
 // makeProxyCaddyPrepareHandler 返回 POST /api/proxy/caddy?serverId=<id>(认证 + CSRF + 审计)→ CaddyStatus DTO。
 // 显式部署反代环境(atomgo-caddy 容器)而无需先绑域名;外接模式则校验主 Caddyfile 的 import。80/443 冲突等人话错误透出。serverId 为空 → 400。
+// 可选 JSON body 携带 managed 资源覆盖(network/containerName/dataVolume/configVolume):
+// 非空 → 先落库再部署(「保存 + 部署」一步完成);无 body / 全空 → 兼容旧路径(按已存设置部署)。
 func makeProxyCaddyPrepareHandler(svc proxy.Service, rec audit.Recorder) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if svc == nil {
@@ -595,7 +606,41 @@ func makeProxyCaddyPrepareHandler(svc proxy.Service, rec audit.Recorder) http.Ha
 			writeError(w, http.StatusBadRequest, "invalid_route", "请选择目标主机")
 			return
 		}
-		st, err := svc.PrepareCaddy(r.Context(), serverID)
+		var res proxy.CaddyResources
+		if r.Body != nil {
+			body, rerr := io.ReadAll(http.MaxBytesReader(w, r.Body, 1<<14))
+			if rerr != nil {
+				writeError(w, http.StatusBadRequest, "bad_request", "请求体不可读或过大")
+				return
+			}
+			if len(bytes.TrimSpace(body)) > 0 {
+				var req struct {
+					Network       string `json:"network"`
+					ContainerName string `json:"containerName"`
+					DataVolume    string `json:"dataVolume"`
+					ConfigVolume  string `json:"configVolume"`
+				}
+				if err := json.Unmarshal(body, &req); err != nil {
+					writeError(w, http.StatusBadRequest, "bad_request", "请求体格式错误")
+					return
+				}
+				res = proxy.CaddyResources{
+					Network:       strings.TrimSpace(req.Network),
+					ContainerName: strings.TrimSpace(req.ContainerName),
+					DataVol:       strings.TrimSpace(req.DataVolume),
+					ConfigVol:     strings.TrimSpace(req.ConfigVolume),
+				}
+			}
+		}
+		var (
+			st  *proxy.CaddyStatus
+			err error
+		)
+		if res.Any() {
+			st, err = svc.PrepareCaddyWithResources(r.Context(), serverID, res)
+		} else {
+			st, err = svc.PrepareCaddy(r.Context(), serverID)
+		}
 		if err != nil {
 			writeProxyError(w, err)
 			return
@@ -605,7 +650,7 @@ func makeProxyCaddyPrepareHandler(svc proxy.Service, rec audit.Recorder) http.Ha
 			Action:     auditActionProxyCaddyPrepare,
 			TargetType: auditTargetProxyCaddy,
 			TargetID:   serverID,
-			Detail:     map[string]any{"serverId": serverID},
+			Detail:     map[string]any{"serverId": serverID, "resourcesSaved": res.Any()},
 			IP:         clientIP(r),
 		})
 		writeJSON(w, http.StatusOK, proxyCaddyStatusDTO{
@@ -679,6 +724,13 @@ type proxyServerSettingsDTO struct {
 	ConfigPath  string `json:"configPath"`
 	FragmentDir string `json:"fragmentDir"`
 	ReloadCmd   string `json:"reloadCmd"`
+	// ExternalCaddyContainer 是外接模式下用户 Caddy 所在容器名(容器化 Caddy 场景);空 = 宿主文件模式。
+	ExternalCaddyContainer string `json:"externalCaddyContainer"`
+	// 托管模式资源(可配置,空 → 全局缺省)。
+	Network       string `json:"network"`
+	ContainerName string `json:"containerName"`
+	DataVolume    string `json:"dataVolume"`
+	ConfigVolume  string `json:"configVolume"`
 }
 
 // makeGetServerProxySettingsHandler 返回 GET /api/proxy/server-settings?serverId=<id> → 生效反代设置。
@@ -700,11 +752,16 @@ func makeGetServerProxySettingsHandler(svc proxy.Service) http.HandlerFunc {
 			return
 		}
 		writeJSON(w, http.StatusOK, proxyServerSettingsDTO{
-			ServerID:    serverID,
-			Mode:        st.EffectiveMode(),
-			ConfigPath:  st.EffectiveConfigPath(),
-			FragmentDir: st.EffectiveFragmentDir(),
-			ReloadCmd:   strings.Join(st.EffectiveReloadArgs(), " "),
+			ServerID:               serverID,
+			Mode:                   st.EffectiveMode(),
+			ConfigPath:             st.EffectiveConfigPath(),
+			FragmentDir:            st.EffectiveFragmentDir(),
+			ReloadCmd:              strings.Join(st.EffectiveReloadArgs(), " "),
+			ExternalCaddyContainer: st.EffectiveExternalCaddyContainer(),
+			Network:                st.EffectiveNetwork(),
+			ContainerName:          st.EffectiveContainerName(),
+			DataVolume:             st.EffectiveDataVol(),
+			ConfigVolume:           st.EffectiveConfigVol(),
 		})
 	}
 }
@@ -724,20 +781,30 @@ func makeSetServerProxySettingsHandler(svc proxy.Service, rec audit.Recorder) ht
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, 1<<16)
 		var req struct {
-			Mode        string `json:"mode"`
-			ConfigPath  string `json:"configPath"`
-			FragmentDir string `json:"fragmentDir"`
-			ReloadCmd   string `json:"reloadCmd"`
+			Mode                   string `json:"mode"`
+			ConfigPath             string `json:"configPath"`
+			FragmentDir            string `json:"fragmentDir"`
+			ReloadCmd              string `json:"reloadCmd"`
+			ExternalCaddyContainer string `json:"externalCaddyContainer"`
+			Network                string `json:"network"`
+			ContainerName          string `json:"containerName"`
+			DataVolume             string `json:"dataVolume"`
+			ConfigVolume           string `json:"configVolume"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeError(w, http.StatusBadRequest, "bad_request", "请求体格式错误")
 			return
 		}
 		in := proxy.CaddySettings{
-			Mode:        strings.TrimSpace(req.Mode),
-			ConfigPath:  strings.TrimSpace(req.ConfigPath),
-			FragmentDir: strings.TrimSpace(req.FragmentDir),
-			ReloadCmd:   strings.TrimSpace(req.ReloadCmd),
+			Mode:                   strings.TrimSpace(req.Mode),
+			ConfigPath:             strings.TrimSpace(req.ConfigPath),
+			FragmentDir:            strings.TrimSpace(req.FragmentDir),
+			ReloadCmd:              strings.TrimSpace(req.ReloadCmd),
+			ExternalCaddyContainer: strings.TrimSpace(req.ExternalCaddyContainer),
+			Network:                strings.TrimSpace(req.Network),
+			ContainerName:          strings.TrimSpace(req.ContainerName),
+			DataVol:                strings.TrimSpace(req.DataVolume),
+			ConfigVol:              strings.TrimSpace(req.ConfigVolume),
 		}
 		if in.Mode != "" && in.Mode != proxy.ModeManaged && in.Mode != proxy.ModeExternal {
 			writeError(w, http.StatusBadRequest, "invalid_mode", "mode 仅支持 managed / external")
@@ -761,11 +828,16 @@ func makeSetServerProxySettingsHandler(svc proxy.Service, rec audit.Recorder) ht
 			return
 		}
 		writeJSON(w, http.StatusOK, proxyServerSettingsDTO{
-			ServerID:    serverID,
-			Mode:        st.EffectiveMode(),
-			ConfigPath:  st.EffectiveConfigPath(),
-			FragmentDir: st.EffectiveFragmentDir(),
-			ReloadCmd:   strings.Join(st.EffectiveReloadArgs(), " "),
+			ServerID:               serverID,
+			Mode:                   st.EffectiveMode(),
+			ConfigPath:             st.EffectiveConfigPath(),
+			FragmentDir:            st.EffectiveFragmentDir(),
+			ReloadCmd:              strings.Join(st.EffectiveReloadArgs(), " "),
+			ExternalCaddyContainer: st.EffectiveExternalCaddyContainer(),
+			Network:                st.EffectiveNetwork(),
+			ContainerName:          st.EffectiveContainerName(),
+			DataVolume:             st.EffectiveDataVol(),
+			ConfigVolume:           st.EffectiveConfigVol(),
 		})
 	}
 }

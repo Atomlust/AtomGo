@@ -64,6 +64,112 @@ func TestPrepareCaddyEmptyServerID(t *testing.T) {
 	}
 }
 
+// TestPrepareCaddyWithResourcesPersistsAndDeploys 证「保存+部署」一步:部署请求携带资源覆盖时,
+// 先落库(仅 4 个资源字段)再用覆盖后的名字部署(docker run --name <自定义>)。
+func TestPrepareCaddyWithResourcesPersistsAndDeploys(t *testing.T) {
+	ctx := context.Background()
+	st := storetest.OpenDB(t)
+	ft := caddyAbsentTarget()
+	svc := &service{store: NewStore(st), tg: ft, prober: fakeProber{}}
+
+	if _, err := svc.PrepareCaddyWithResources(ctx, "srv-1", CaddyResources{
+		Network: "my-proxy-net", ContainerName: "my-caddy", DataVol: "my_data", ConfigVol: "my_config",
+	}); err != nil {
+		t.Fatalf("PrepareCaddyWithResources: %v", err)
+	}
+
+	// 部署用自定义容器名/网络。
+	joined := joinedCalls(ft)
+	mustHaveInOrder(t, joined, []string{
+		"docker network inspect my-proxy-net",
+		"docker inspect my-caddy",
+		"docker run -d --name my-caddy",
+	})
+	// 资源覆盖已落库。
+	got, err := NewStore(st).getServerProxySettings(ctx, "srv-1")
+	if err != nil || got == nil {
+		t.Fatalf("资源覆盖应已落库: got=%v err=%v", got, err)
+	}
+	if got.ContainerName != "my-caddy" || got.Network != "my-proxy-net" || got.DataVol != "my_data" || got.ConfigVol != "my_config" {
+		t.Fatalf("落库资源不符: %+v", got)
+	}
+}
+
+// TestPrepareCaddyWithResourcesPreservesOtherOverrides 证资源落库只动 4 个资源字段,
+// 既有的外接覆盖字段(如 ExternalCaddyContainer)原样保留。
+func TestPrepareCaddyWithResourcesPreservesOtherOverrides(t *testing.T) {
+	ctx := context.Background()
+	st := storetest.OpenDB(t)
+	svc := &service{store: NewStore(st), tg: caddyAbsentTarget(), prober: fakeProber{}}
+
+	// 预置一条含外接覆盖的设置行。
+	if err := svc.SetServerCaddySettings(ctx, "srv-1", CaddySettings{
+		Mode:                   modeExternal,
+		ConfigPath:             "/etc/caddy/Caddyfile",
+		ExternalCaddyContainer: "user-caddy",
+	}); err != nil {
+		t.Fatalf("预置设置: %v", err)
+	}
+
+	if _, err := svc.PrepareCaddyWithResources(ctx, "srv-1", CaddyResources{
+		Network: "net-x", ContainerName: "ct-x",
+	}); err != nil {
+		t.Fatalf("PrepareCaddyWithResources: %v", err)
+	}
+
+	got, err := NewStore(st).getServerProxySettings(ctx, "srv-1")
+	if err != nil || got == nil {
+		t.Fatalf("读回设置: %v %v", got, err)
+	}
+	if got.Mode != modeExternal || got.ConfigPath != "/etc/caddy/Caddyfile" || got.ExternalCaddyContainer != "user-caddy" {
+		t.Fatalf("非资源字段应保留: %+v", got)
+	}
+	if got.Network != "net-x" || got.ContainerName != "ct-x" {
+		t.Fatalf("资源字段应更新: %+v", got)
+	}
+}
+
+// TestPrepareCaddyWithResourcesInvalidName 证非法资源名(防 flag 注入)→ ErrInvalidCaddyResource 且不部署。
+func TestPrepareCaddyWithResourcesInvalidName(t *testing.T) {
+	ctx := context.Background()
+	st := storetest.OpenDB(t)
+	ft := caddyAbsentTarget()
+	svc := &service{store: NewStore(st), tg: ft, prober: fakeProber{}}
+
+	if _, err := svc.PrepareCaddyWithResources(ctx, "srv-1", CaddyResources{ContainerName: "--privileged"}); err != ErrInvalidCaddyResource {
+		t.Fatalf("非法容器名应报 ErrInvalidCaddyResource, got %v", err)
+	}
+	if _, err := svc.PrepareCaddyWithResources(ctx, "srv-1", CaddyResources{Network: "a b"}); err != ErrInvalidCaddyResource {
+		t.Fatalf("含空格网络名应报 ErrInvalidCaddyResource, got %v", err)
+	}
+	for _, c := range ft.execCalls {
+		if len(c) > 0 && c[0] == "docker" && (c[1] == "run" || c[1] == "network") {
+			t.Fatalf("校验失败不应触达 docker: %v", c)
+		}
+	}
+}
+
+// TestPrepareCaddyWithResourcesEmpty 证全空资源 = 不写库、直接按已存设置部署(等价 PrepareCaddy)。
+func TestPrepareCaddyWithResourcesEmpty(t *testing.T) {
+	ctx := context.Background()
+	st := storetest.OpenDB(t)
+	ft := caddyAbsentTarget()
+	svc := &service{store: NewStore(st), tg: ft, prober: fakeProber{}}
+
+	if _, err := svc.PrepareCaddyWithResources(ctx, "srv-1", CaddyResources{}); err != nil {
+		t.Fatalf("全空资源应直接部署: %v", err)
+	}
+	joined := joinedCalls(ft)
+	mustHaveInOrder(t, joined, []string{"docker run -d --name atomgo-caddy"})
+	got, err := NewStore(st).getServerProxySettings(ctx, "srv-1")
+	if err != nil {
+		t.Fatalf("读设置: %v", err)
+	}
+	if got != nil {
+		t.Fatalf("全空资源不应写库, got %+v", got)
+	}
+}
+
 // TestPrepareCaddyPortConflict 验证 80/443 被占用时 PrepareCaddy 透出端口冲突错误。
 func TestPrepareCaddyPortConflict(t *testing.T) {
 	ctx := context.Background()

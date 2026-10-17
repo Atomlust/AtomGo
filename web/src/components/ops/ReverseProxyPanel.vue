@@ -131,6 +131,7 @@ onMounted(loadCaddyStatus)
 const modeInfo = ref<ProxyModeInfo | null>(null)
 
 const isExternal = computed(() => serverMode.value === 'external')
+const isManaged = computed(() => serverMode.value === 'managed')
 
 async function loadMode(): Promise<void> {
   try {
@@ -154,11 +155,49 @@ const modeSaving = ref(false)
 const extConfigPath = computed(() => serverSettings.value?.configPath || modeInfo.value?.configPath || '')
 const extFragmentDir = computed(() => serverSettings.value?.fragmentDir || modeInfo.value?.fragmentDir || '')
 const extReloadCmd = computed(() => serverSettings.value?.reloadCmd || modeInfo.value?.reloadCmd || '')
+// 外接模式的「用户 Caddy 容器名」(容器化 Caddy 场景)。
+const extContainer = computed(
+  () => serverSettings.value?.externalCaddyContainer || modeInfo.value?.externalCaddyContainer || '',
+)
+
+// 外接模式:容器名可编辑控件 + 脏检测 + 保存。
+const extCaddyContainer = ref('')
+const extSaving = ref(false)
+const extCaddyDirty = computed(() => (serverSettings.value?.externalCaddyContainer ?? '') !== extCaddyContainer.value)
+
+function syncExtInputs(): void {
+  extCaddyContainer.value = serverSettings.value?.externalCaddyContainer || ''
+}
+
+/** 保存外接模式的用户 Caddy 容器名(逐服务器覆盖;空 = 回退宿主文件模式)。 */
+async function saveExtContainer(): Promise<void> {
+  if (extSaving.value) return
+  extSaving.value = true
+  try {
+    const res = await setServerCaddySettings(props.serverId, {
+      mode: 'external',
+      externalCaddyContainer: extCaddyContainer.value,
+    })
+    serverSettings.value = res
+    syncExtInputs()
+    toast.success(t('reverseProxy.srv.resSaved'))
+  } catch (err) {
+    toast.error(t('reverseProxy.srv.resSaveFail'), {
+      detail:
+        err instanceof HttpError
+          ? (err.apiError?.message ?? t('reverseProxy.errReq', { status: err.status }))
+          : t('reverseProxy.errNetwork'),
+    })
+  } finally {
+    extSaving.value = false
+  }
+}
 
 async function loadServerSettings(): Promise<void> {
   try {
     serverSettings.value = await getServerCaddySettings(props.serverId)
     serverMode.value = serverSettings.value.mode === 'external' ? 'external' : 'managed'
+    syncResInputs()
     if (serverMode.value === 'external') void loadImportStatus()
   } catch {
     // 按服务器设置为增强项,失败静默降级(回退到 caddy.mode / 全局)。
@@ -173,6 +212,7 @@ async function changeMode(mode: 'managed' | 'external'): Promise<void> {
     const res = await setServerCaddySettings(props.serverId, { mode })
     serverSettings.value = res
     serverMode.value = res.mode
+    syncResInputs()
     toast.success(t('reverseProxy.srv.saved'))
     // 模式变化影响容器卡 / 外部提示卡 / 注入区 → 刷新 caddy 状态并(外部时)拉注入状态。
     await loadCaddyStatus()
@@ -188,6 +228,46 @@ async function changeMode(mode: 'managed' | 'external'): Promise<void> {
     modeSaving.value = false
   }
 }
+
+// ─── 托管模式 Caddy 资源(网络 / 容器名 / 卷)部署设置 ─────────────────────────
+// 仅 managed 模式有意义:AtomGo 自建 atomgo-caddy 容器时,这些资源默认叫 atomgo-proxy /
+// atomgo-caddy / atomgo_caddy_data / atomgo_caddy_config。多实例 / 多租户同宿主时,
+// 可逐服务器改成不撞名,避免网络 / 容器 / 卷冲突。空字段 = 回退全局缺省。
+// 交互:资源输入与「部署反代理环境」按钮同卡 —— 点部署即「保存 + 部署」一步完成,
+// 不再有独立的「保存资源」按钮(原先忘点保存会静默用旧值部署)。已部署时输入锁定
+//(改名会让探测找不到旧容器、再部署出双容器,须先移除环境)。
+const resNetwork = ref('')
+const resContainer = ref('')
+const resDataVol = ref('')
+const resConfigVol = ref('')
+
+/** 已部署 → 资源输入锁定(移除环境后才可改;防止改出「孤儿容器」)。 */
+const resLocked = computed(() => !!caddy.value?.installed)
+
+/** 把后端回显的生效值同步进输入控件(加载 / 切模式后调用)。 */
+function syncResInputs(): void {
+  const s = serverSettings.value
+  if (!s) return
+  resNetwork.value = s.network || ''
+  resContainer.value = s.containerName || ''
+  resDataVol.value = s.dataVolume || ''
+  resConfigVol.value = s.configVolume || ''
+  syncExtInputs()
+}
+
+// 占位符 = 全局缺省(取自 GET /api/proxy/mode 的全局生效值)。
+const defNetwork = computed(() => modeInfo.value?.network || 'atomgo-proxy')
+const defContainer = computed(() => modeInfo.value?.containerName || 'atomgo-caddy')
+const defDataVol = computed(() => modeInfo.value?.dataVolume || 'atomgo_caddy_data')
+const defConfigVol = computed(() => modeInfo.value?.configVolume || 'atomgo_caddy_config')
+
+/** 当前输入是否与已存生效值不同(部署时后端按这些值落库;相同则纯部署)。 */
+const resDirty = computed(() => {
+  const s = serverSettings.value
+  const cur = [s?.network ?? '', s?.containerName ?? '', s?.dataVolume ?? '', s?.configVolume ?? '']
+  const now = [resNetwork.value, resContainer.value, resDataVol.value, resConfigVol.value]
+  return cur.some((v, i) => v !== now[i])
+})
 
 // ─── 外接模式「自动注入 import 行」(确认后改写用户主 Caddyfile) ────────────────
 const importStatus = ref<ExternalImportResult | null>(null)
@@ -281,6 +361,8 @@ function confirmCaddyConsent(): Promise<boolean> {
 /**
  * 用户主动部署反代环境:走与首次绑定相同的同意弹窗,确认后拉起 atomgo-caddy 容器,
  * 成功即把状态卡翻到「运行中」。给用户一条显式、自助的同意路径(无需先绑域名)。
+ * 部署请求内联携带资源设置(网络/容器名/两卷):后端先落库再部署 —— 「保存+部署」一步完成;
+ * 输入与已存值一致时(未脏)不携带,纯按已存设置部署。
  */
 async function deployEnv(): Promise<void> {
   if (caddyDeploying.value) return
@@ -288,8 +370,20 @@ async function deployEnv(): Promise<void> {
   if (!ok) return
   caddyDeploying.value = true
   try {
-    caddy.value = await prepareCaddyEnv(props.serverId)
+    caddy.value = await prepareCaddyEnv(
+      props.serverId,
+      resDirty.value
+        ? {
+            network: resNetwork.value,
+            containerName: resContainer.value,
+            dataVolume: resDataVol.value,
+            configVolume: resConfigVol.value,
+          }
+        : undefined,
+    )
     toast.success(t('reverseProxy.caddy.deployed'))
+    // 部署成功后回读设置,刷新输入基线(资源已按部署时的值落库)。
+    await loadServerSettings()
   } catch (err) {
     toast.error(t('reverseProxy.caddy.deployFail'), {
       detail:
@@ -663,6 +757,28 @@ function statusLabel(s: ProxyRoute['certStatus']): string {
           <code>{{ extReloadCmd }}</code>
         </p>
 
+        <!-- 外接模式:容器化 Caddy(可选)。填了容器名 → 文件操作与默认 reload 走 docker exec,无需 bind-mount。 -->
+        <div class="caddy__container">
+          <p class="caddy__container-title">{{ t('reverseProxy.srv.extContainerTitle') }}</p>
+          <p class="caddy__container-desc">{{ t('reverseProxy.srv.extContainerDesc') }}</p>
+          <div class="caddy__container-row">
+            <input
+              v-model="extCaddyContainer"
+              class="rp__in mono caddy__container-in"
+              :placeholder="t('reverseProxy.srv.extContainerPlaceholder')"
+              autocomplete="off"
+              spellcheck="false"
+            />
+            <button
+              class="caddy__container-save"
+              :disabled="!extCaddyDirty || extSaving"
+              @click="saveExtContainer"
+            >
+              {{ extSaving ? t('reverseProxy.srv.saving') : t('reverseProxy.srv.resSave') }}
+            </button>
+          </div>
+        </div>
+
         <!-- 外接模式必做的一次性操作:把 AtomGo 反代片段的 import 行注入主 Caddyfile。 -->
         <div class="caddy__import">
           <p class="caddy__import-title">{{ t('reverseProxy.srv.injectTitle') }}</p>
@@ -754,6 +870,72 @@ function statusLabel(s: ProxyRoute['certStatus']): string {
             {{ t('reverseProxy.caddy.absentDesc') }}
           </template>
         </p>
+
+        <!-- 托管部署设置(网络/容器名/两卷)与部署按钮同卡:点部署即「保存+部署」一步完成。
+             已部署时锁定(改名会孤儿化旧容器,须先移除环境)。 -->
+        <div class="caddy__res">
+          <p class="caddy__res-title">{{ t('reverseProxy.srv.resTitle') }}</p>
+          <p class="caddy__res-hint">
+            {{ resLocked ? t('reverseProxy.srv.resLockedHint') : t('reverseProxy.srv.resHint') }}
+          </p>
+          <div class="caddy__res-grid">
+            <div class="rp__field">
+              <label class="rp__label">{{ t('reverseProxy.srv.resNetwork') }}</label>
+              <input
+                v-model="resNetwork"
+                class="rp__in mono"
+                :placeholder="defNetwork"
+                :disabled="resLocked"
+                autocomplete="off"
+                spellcheck="false"
+              />
+            </div>
+            <div class="rp__field">
+              <label class="rp__label">{{ t('reverseProxy.srv.resContainer') }}</label>
+              <input
+                v-model="resContainer"
+                class="rp__in mono"
+                :placeholder="defContainer"
+                :disabled="resLocked"
+                autocomplete="off"
+                spellcheck="false"
+              />
+            </div>
+            <div class="rp__field">
+              <label class="rp__label">{{ t('reverseProxy.srv.resDataVolume') }}</label>
+              <input
+                v-model="resDataVol"
+                class="rp__in mono"
+                :placeholder="defDataVol"
+                :disabled="resLocked"
+                autocomplete="off"
+                spellcheck="false"
+              />
+            </div>
+            <div class="rp__field">
+              <label class="rp__label">{{ t('reverseProxy.srv.resConfigVolume') }}</label>
+              <input
+                v-model="resConfigVol"
+                class="rp__in mono"
+                :placeholder="defConfigVol"
+                :disabled="resLocked"
+                autocomplete="off"
+                spellcheck="false"
+              />
+            </div>
+          </div>
+
+          <!-- 部署按钮嵌入表单下方:点部署即「保存+部署」一步完成 -->
+          <button
+            v-if="!caddy.installed"
+            class="caddy__deploy"
+            :disabled="caddyDeploying"
+            @click="deployEnv"
+          >
+            <NIcon :size="14"><Server /></NIcon>
+            {{ caddyDeploying ? t('reverseProxy.caddy.deploying') : t('reverseProxy.caddy.deploy') }}
+          </button>
+        </div>
       </div>
       <button
         v-if="caddy.installed"
@@ -763,15 +945,6 @@ function statusLabel(s: ProxyRoute['certStatus']): string {
       >
         <NIcon :size="14"><CircleX /></NIcon>
         {{ caddyRemoving ? t('reverseProxy.caddy.removing') : t('reverseProxy.caddy.remove') }}
-      </button>
-      <button
-        v-else
-        class="caddy__deploy"
-        :disabled="caddyDeploying"
-        @click="deployEnv"
-      >
-        <NIcon :size="14"><Server /></NIcon>
-        {{ caddyDeploying ? t('reverseProxy.caddy.deploying') : t('reverseProxy.caddy.deploy') }}
       </button>
     </div>
 
@@ -1134,8 +1307,7 @@ function statusLabel(s: ProxyRoute['certStatus']): string {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  flex-shrink: 0;
-  align-self: center;
+  margin-top: 12px;
   font-size: var(--text-micro);
   font-weight: 600;
   padding: 7px 14px;
@@ -1173,6 +1345,59 @@ function statusLabel(s: ProxyRoute['certStatus']): string {
   font-size: var(--text-micro);
   word-break: break-all;
 }
+.caddy__container {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--color-border-strong);
+}
+.caddy__container-title {
+  margin: 0;
+  font-size: var(--text-micro);
+  font-weight: 600;
+  color: var(--color-text);
+}
+.caddy__container-desc {
+  margin: 4px 0 10px;
+  font-size: var(--text-micro);
+  color: var(--color-dim);
+  line-height: 1.6;
+}
+.caddy__container-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.caddy__container-in {
+  flex: 1;
+  min-width: 180px;
+}
+.caddy__container-save {
+  display: inline-flex;
+  align-items: center;
+  height: 34px;
+  padding: 0 16px;
+  font-size: var(--text-label);
+  font-weight: 600;
+  border-radius: var(--rounded-md);
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-card);
+  color: var(--color-dim);
+  cursor: pointer;
+  transition:
+    color var(--duration-fast, 150ms) var(--ease-out-expo, ease),
+    border-color var(--duration-fast, 150ms) var(--ease-out-expo, ease),
+    background var(--duration-fast, 150ms) var(--ease-out-expo, ease);
+}
+.caddy__container-save:hover:not(:disabled) {
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+  background: var(--color-primary-soft);
+}
+.caddy__container-save:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 .caddy__deploy:disabled {
   opacity: 0.5;
   cursor: not-allowed;
@@ -1207,6 +1432,32 @@ function statusLabel(s: ProxyRoute['certStatus']): string {
 .rp__mode-saving {
   font-size: var(--text-micro);
   color: var(--color-primary);
+}
+
+/* 托管部署设置(网络/容器名/卷):嵌入状态卡,与部署按钮同卡(保存+部署一步) */
+.caddy__res {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--color-border);
+}
+.caddy__res-title {
+  margin: 0;
+  font-size: var(--text-micro);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-faint);
+}
+.caddy__res-hint {
+  margin: 4px 0 10px;
+  font-size: var(--text-micro);
+  color: var(--color-faint);
+  line-height: 1.6;
+}
+.caddy__res-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 12px;
 }
 
 /* 外接模式:自动注入 import 行 */

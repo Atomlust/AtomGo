@@ -54,6 +54,18 @@ const (
 	externalFragmentDirEnv = "ATOMGO_CADDY_EXTERNAL_FRAGMENT_DIR"
 	// externalReloadCmdEnv 是外接模式下触发 reload 的命令(数组形态,空格分隔);默认 `caddy reload`。
 	externalReloadCmdEnv = "ATOMGO_CADDY_EXTERNAL_RELOAD_CMD"
+	// externalCaddyContainerEnv 是外接模式下「用户 Caddy 所在容器名」(容器化 Caddy 场景)。
+	// 设了它,外接模式的文件操作(cat/grep/mkdir/test/写片段)与默认 reload 都经 `docker exec <容器>` 进行,
+	// 无需把 Caddyfile / 片段目录 bind-mount 到宿主 —— 直接兼容官方 stock `caddy:2` 容器。
+	externalCaddyContainerEnv = "ATOMGO_CADDY_EXTERNAL_CONTAINER"
+	// 以下为「托管模式」资源可配置项(档位 B 按服务器覆盖的同义 env;空 → 下方默认常量)。
+	// caddyNetworkEnv 是托管 Caddy 与上游容器共享的 docker 网络名。
+	caddyNetworkEnv = "ATOMGO_CADDY_NETWORK"
+	// caddyContainerEnv 是托管的反代容器名(每主机一个,幂等创建)。
+	caddyContainerEnv = "ATOMGO_CADDY_CONTAINER"
+	// caddyDataVolEnv / caddyConfigVolEnv 是证书/自动配置持久卷名。
+	caddyDataVolEnv   = "ATOMGO_CADDY_DATA_VOLUME"
+	caddyConfigVolEnv = "ATOMGO_CADDY_CONFIG_VOLUME"
 	// 默认值(官方 caddy 镜像约定的主配置路径 / 片段目录)。
 	defaultExternalConfigPath  = "/etc/caddy/Caddyfile"
 	defaultExternalFragmentDir = "/etc/atomgo-proxy"
@@ -274,12 +286,12 @@ func ensureCaddy(ctx context.Context, tg target.Service, serverID string, tcpPor
 		return verifyExternalImport(ctx, tg, serverID, settings)
 	}
 	// 1) 共享网络(存在即跳过)。inspect 非零退出(网络不存在)→ create。
-	netInsp, err := tg.Exec(ctx, serverID, []string{"docker", "network", "inspect", proxyNetwork})
+	netInsp, err := tg.Exec(ctx, serverID, []string{"docker", "network", "inspect", settings.EffectiveNetwork()})
 	if err != nil {
 		return mapExecErr(err)
 	}
 	if netInsp.ExitCode != 0 {
-		res, cerr := tg.Exec(ctx, serverID, []string{"docker", "network", "create", proxyNetwork})
+		res, cerr := tg.Exec(ctx, serverID, []string{"docker", "network", "create", settings.EffectiveNetwork()})
 		if cerr != nil {
 			return mapExecErr(cerr)
 		}
@@ -290,12 +302,12 @@ func ensureCaddy(ctx context.Context, tg target.Service, serverID string, tcpPor
 
 	// 2) Caddy 容器存在:校验是否已发布全部 TCP 监听端口。已覆盖 → 幂等返回;缺端口 → 保留既有
 	//    端口映射(如自定义 18080/18443)并补上缺失的 TCP 端口后重建容器。
-	insp, err := tg.Exec(ctx, serverID, []string{"docker", "inspect", caddyContainer})
+	insp, err := tg.Exec(ctx, serverID, []string{"docker", "inspect", settings.EffectiveContainerName()})
 	if err != nil {
 		return mapExecErr(err)
 	}
 	if insp.ExitCode == 0 {
-		cur, perr := inspectCaddyPortMap(ctx, tg, serverID)
+		cur, perr := inspectCaddyPortMap(ctx, tg, serverID, settings)
 		if perr != nil {
 			return perr
 		}
@@ -303,12 +315,12 @@ func ensureCaddy(ctx context.Context, tg target.Service, serverID string, tcpPor
 			return nil
 		}
 		// 重建:rm -f 释放端口 → 用「既有映射 ∪ TCP 端口」重起。
-		if rmRes, rmErr := tg.Exec(ctx, serverID, []string{"docker", "rm", "-f", caddyContainer}); rmErr != nil {
+		if rmRes, rmErr := tg.Exec(ctx, serverID, []string{"docker", "rm", "-f", settings.EffectiveContainerName()}); rmErr != nil {
 			return mapExecErr(rmErr)
 		} else if rmRes.ExitCode != 0 {
 			return fmt.Errorf("%w:%s", ErrCaddyStart, strings.TrimSpace(firstNonEmpty(rmRes.Stderr, rmRes.Stdout)))
 		}
-		return runCaddyContainer(ctx, tg, serverID, mergeCaddyPorts(cur, tcpPorts))
+		return runCaddyContainer(ctx, tg, serverID, mergeCaddyPorts(cur, tcpPorts), settings)
 	}
 
 	// 3) 全新部署:起前探测 80/443 占用(避免与既有进程抢端口,LE 校验需 80)。
@@ -317,12 +329,12 @@ func ensureCaddy(ctx context.Context, tg target.Service, serverID string, tcpPor
 	}
 	// 默认映射 80→80 / 443→443,再叠加 TCP 端口(p→p)。
 	defaults := map[int]int{80: 80, 443: 443}
-	return runCaddyContainer(ctx, tg, serverID, mergeCaddyPorts(defaults, tcpPorts))
+	return runCaddyContainer(ctx, tg, serverID, mergeCaddyPorts(defaults, tcpPorts), settings)
 }
 
 // runCaddyContainer 用给定的「容器端口 → 宿主端口」映射起 Caddy 容器(array 不拼 shell)。
 // --add-host host.docker.internal:host-gateway 让 address 类上游能反代到宿主机服务。
-func runCaddyContainer(ctx context.Context, tg target.Service, serverID string, ports map[int]int) error {
+func runCaddyContainer(ctx context.Context, tg target.Service, serverID string, ports map[int]int, settings CaddySettings) error {
 	image := caddyImageRef()
 	// best-effort pull(离线/已缓存场景交由 docker run 决断)。
 	if _, perr := tg.Exec(ctx, serverID, []string{"docker", "pull", image}); perr != nil {
@@ -330,9 +342,9 @@ func runCaddyContainer(ctx context.Context, tg target.Service, serverID string, 
 	}
 	runCmd := []string{
 		"docker", "run", "-d",
-		"--name", caddyContainer,
+		"--name", settings.EffectiveContainerName(),
 		"--restart", "unless-stopped",
-		"--network", proxyNetwork,
+		"--network", settings.EffectiveNetwork(),
 		"--add-host", "host.docker.internal:host-gateway",
 	}
 	// 端口按容器端口升序发布(渲染确定,便于诊断)。
@@ -345,8 +357,8 @@ func runCaddyContainer(ctx context.Context, tg target.Service, serverID string, 
 		runCmd = append(runCmd, "-p", strconv.Itoa(ports[cp])+":"+strconv.Itoa(cp))
 	}
 	runCmd = append(runCmd,
-		"-v", caddyDataVol+":/data",
-		"-v", caddyConfigVol+":/config",
+		"-v", settings.EffectiveDataVol()+":/data",
+		"-v", settings.EffectiveConfigVol()+":/config",
 		image,
 		"caddy", "run", "--config", caddyfilePath, "--adapter", "caddyfile",
 	)
@@ -362,9 +374,9 @@ func runCaddyContainer(ctx context.Context, tg target.Service, serverID string, 
 
 // inspectCaddyPortMap 读 atomgo-caddy 已发布的「容器端口 → 宿主端口」(仅 tcp)。
 // 无容器 / 解析失败 → 空 map(调用方据此当全新部署处理)。
-func inspectCaddyPortMap(ctx context.Context, tg target.Service, serverID string) (map[int]int, error) {
+func inspectCaddyPortMap(ctx context.Context, tg target.Service, serverID string, settings CaddySettings) (map[int]int, error) {
 	res, err := tg.Exec(ctx, serverID, []string{
-		"docker", "inspect", caddyContainer,
+		"docker", "inspect", settings.EffectiveContainerName(),
 		"--format", "{{range $p, $c := .HostConfig.PortBindings}}{{$p}}={{(index $c 0).HostPort}} {{end}}",
 	})
 	if err != nil {
@@ -428,7 +440,7 @@ func inspectCaddy(ctx context.Context, tg target.Service, serverID string, setti
 	st := &CaddyStatus{Mode: modeManaged}
 	// 一次 inspect 同时拿运行态与镜像(format 以 | 分隔,避免拼 shell)。
 	insp, err := tg.Exec(ctx, serverID, []string{
-		"docker", "inspect", caddyContainer,
+		"docker", "inspect", settings.EffectiveContainerName(),
 		"--format", "{{.State.Running}}|{{.Config.Image}}",
 	})
 	if err != nil {
@@ -445,15 +457,15 @@ func inspectCaddy(ctx context.Context, tg target.Service, serverID string, setti
 		st.Image = strings.TrimSpace(out[i+1:])
 	}
 	// 端口摘要(best-effort:任何失败都给 "",不阻断也不报错)。
-	st.Ports = inspectCaddyPorts(ctx, tg, serverID)
+	st.Ports = inspectCaddyPorts(ctx, tg, serverID, settings)
 	return st, nil
 }
 
 // inspectCaddyPorts best-effort 读 atomgo-caddy 的发布端口摘要(如 "80,443")。
 // 解析 NetworkSettings.Ports 的 key(形如 "80/tcp"),取端口号去重升序。任何失败给 ""。
-func inspectCaddyPorts(ctx context.Context, tg target.Service, serverID string) string {
+func inspectCaddyPorts(ctx context.Context, tg target.Service, serverID string, settings CaddySettings) string {
 	res, err := tg.Exec(ctx, serverID, []string{
-		"docker", "inspect", caddyContainer,
+		"docker", "inspect", settings.EffectiveContainerName(),
 		"--format", "{{json .NetworkSettings.Ports}}",
 	})
 	if err != nil || res == nil || res.ExitCode != 0 {
@@ -500,11 +512,11 @@ func removeCaddy(ctx context.Context, tg target.Service, serverID string, settin
 		return nil
 	}
 	// 1) stop(容器不存在的 "No such container" 容忍)。
-	if _, err := tg.Exec(ctx, serverID, []string{"docker", "stop", caddyContainer}); err != nil {
+	if _, err := tg.Exec(ctx, serverID, []string{"docker", "stop", settings.EffectiveContainerName()}); err != nil {
 		return mapExecErr(err)
 	}
 	// 2) rm(同样容忍不存在)。绝不删卷(无 docker volume rm)。
-	if _, err := tg.Exec(ctx, serverID, []string{"docker", "rm", caddyContainer}); err != nil {
+	if _, err := tg.Exec(ctx, serverID, []string{"docker", "rm", settings.EffectiveContainerName()}); err != nil {
 		return mapExecErr(err)
 	}
 	return nil
@@ -538,7 +550,7 @@ func connectUpstream(ctx context.Context, tg target.Service, serverID, container
 	if settings.EffectiveMode() == modeExternal {
 		return nil
 	}
-	res, err := tg.Exec(ctx, serverID, []string{"docker", "network", "connect", proxyNetwork, container})
+	res, err := tg.Exec(ctx, serverID, []string{"docker", "network", "connect", settings.EffectiveNetwork(), container})
 	if err != nil {
 		return mapExecErr(err)
 	}
@@ -578,7 +590,7 @@ func applyCaddyfile(ctx context.Context, tg target.Service, serverID, content st
 		_ = chRes
 	}
 	// 2) docker cp 进容器。
-	cpRes, err := tg.Exec(ctx, serverID, []string{"docker", "cp", caddyfileTmpPath, caddyContainer + ":" + caddyfilePath})
+	cpRes, err := tg.Exec(ctx, serverID, []string{"docker", "cp", caddyfileTmpPath, settings.EffectiveContainerName() + ":" + caddyfilePath})
 	if err != nil {
 		return mapExecErr(err)
 	}
@@ -586,7 +598,7 @@ func applyCaddyfile(ctx context.Context, tg target.Service, serverID, content st
 		return fmt.Errorf("%w:%s", ErrApply, strings.TrimSpace(firstNonEmpty(cpRes.Stderr, cpRes.Stdout)))
 	}
 	// 3) validate(best-effort:旧 Caddy 无 validate 子命令时跳过,不阻断 reload)。
-	val, err := tg.Exec(ctx, serverID, []string{"docker", "exec", caddyContainer, "caddy", "validate", "--config", caddyfilePath, "--adapter", "caddyfile"})
+	val, err := tg.Exec(ctx, serverID, []string{"docker", "exec", settings.EffectiveContainerName(), "caddy", "validate", "--config", caddyfilePath, "--adapter", "caddyfile"})
 	if err != nil {
 		return mapExecErr(err)
 	}
@@ -594,7 +606,7 @@ func applyCaddyfile(ctx context.Context, tg target.Service, serverID, content st
 		return fmt.Errorf("%w:%s", ErrApply, strings.TrimSpace(firstNonEmpty(val.Stderr, val.Stdout)))
 	}
 	// 4) reload(优雅热加载)。
-	rl, err := tg.Exec(ctx, serverID, []string{"docker", "exec", caddyContainer, "caddy", "reload", "--config", caddyfilePath, "--adapter", "caddyfile"})
+	rl, err := tg.Exec(ctx, serverID, []string{"docker", "exec", settings.EffectiveContainerName(), "caddy", "reload", "--config", caddyfilePath, "--adapter", "caddyfile"})
 	if err != nil {
 		return mapExecErr(err)
 	}
@@ -610,6 +622,26 @@ func looksUnsupported(stderr string) bool {
 	return strings.Contains(s, "unknown command") ||
 		strings.Contains(s, "unknown flag") ||
 		strings.Contains(s, "unknown shorthand")
+}
+
+// caddyValidateSkippable 报告宿主侧 `caddy validate` 的失败是否可 best-effort 跳过:
+//   - exit 127(命令未找到,shell 返回)→ 宿主无 caddy 二进制(容器化 Caddy 场景),跳过;
+//   - looksUnsupported:旧 caddy 无 validate 子命令 → 跳过;
+//   - "command not found":直接提示无该命令 → 跳过。
+//
+// 真实配置校验错误(exit 非 0 且非上述)不跳过,继续上报。跳过宿主校验后,校验责任交还
+// `caddy reload`(它本就会先校验、非法配置拒绝替换并回报非零退出)。
+func caddyValidateSkippable(val *target.ExecResult) bool {
+	if val == nil {
+		return false
+	}
+	if val.ExitCode == 127 {
+		return true
+	}
+	if looksUnsupported(val.Stderr) {
+		return true
+	}
+	return strings.Contains(strings.ToLower(val.Stderr), "command not found")
 }
 
 // caddyImageRef 返回反代镜像引用:ATOMGO_CADDY_IMAGE 覆盖,否则默认自构建镜像。
@@ -684,20 +716,9 @@ func externalFragmentDir() string {
 
 // externalFragmentPath 已由 CaddySettings.FragmentPath() 取代(片段路径 = 生效片段目录 + 片段文件名)。
 
-// externalReloadArgs 返回外接模式触发 reload 的命令(argv 数组)。默认 `caddy reload --config
-// <主Caddyfile> --adapter caddyfile`;可用 ATOMGO_CADDY_EXTERNAL_RELOAD_CMD 覆盖(如容器化 Caddy:
-// "docker exec my-caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile")。
-func externalReloadArgs() []string {
-	v := strings.TrimSpace(os.Getenv(externalReloadCmdEnv))
-	if v == "" {
-		return []string{"caddy", "reload", "--config", externalConfigPath(), "--adapter", "caddyfile"}
-	}
-	return strings.Fields(v)
-}
-
-// mkdirExternalFragmentDir 在外接模式于目标主机建片段目录(-p,幂等;数组不拼 shell)。
+// mkdirExternalFragmentDir 在外接模式建片段目录(-p,幂等;数组不拼 shell)。容器化 Caddy 经 docker exec。
 func mkdirExternalFragmentDir(ctx context.Context, tg target.Service, serverID string, settings CaddySettings) error {
-	res, err := tg.Exec(ctx, serverID, []string{"mkdir", "-p", settings.EffectiveFragmentDir()})
+	res, err := tg.Exec(ctx, serverID, settings.mkdirCmd(settings.EffectiveFragmentDir()))
 	if err != nil {
 		return mapExecErr(err)
 	}
@@ -707,15 +728,36 @@ func mkdirExternalFragmentDir(ctx context.Context, tg target.Service, serverID s
 	return nil
 }
 
-// writeExternalFragment 把反代片段内容落到目标主机片段文件(经 tg.Upload,再 chmod 0600 收权限;
-// 内容为 HTTP-01 Caddyfile 片段,可能含域名/上游地址,绝不日志)。与托管模式的临时文件同理,
-// 只是落点改为用户 import 的目录。
+// writeExternalFragment 把反代片段内容落到片段文件。
+// 宿主模式:经 tg.Upload 直接落盘 + chmod 0600。
+// 容器化 Caddy:先传到宿主临时文件,再 docker cp 进容器,容器内 chmod 0600,最后清掉宿主临时文件
+// (无需把片段目录 bind-mount 到宿主)。内容为 HTTP-01 Caddyfile 片段,可能含域名/上游地址,绝不日志。
 func writeExternalFragment(ctx context.Context, tg target.Service, serverID, content string, settings CaddySettings) error {
 	path := settings.FragmentPath()
+	if c := settings.EffectiveExternalCaddyContainer(); c != "" {
+		hostTmp := "/tmp/atomgo-routes-" + strconv.Itoa(os.Getpid()) + ".caddy"
+		if err := tg.Upload(ctx, serverID, strings.NewReader(content), hostTmp); err != nil {
+			return mapExecErr(err)
+		}
+		defer func() { _, _ = tg.Exec(ctx, serverID, []string{"rm", "-f", hostTmp}) }()
+		cpRes, cpErr := tg.Exec(ctx, serverID, []string{"docker", "cp", hostTmp, c + ":" + path})
+		if cpErr != nil {
+			return mapExecErr(cpErr)
+		}
+		if cpRes.ExitCode != 0 {
+			return fmt.Errorf("%w:%s", ErrApply, strings.TrimSpace(firstNonEmpty(cpRes.Stderr, cpRes.Stdout)))
+		}
+		chRes, chErr := tg.Exec(ctx, serverID, settings.chmodCmd(path))
+		if chErr != nil {
+			return mapExecErr(chErr)
+		}
+		_ = chRes
+		return nil
+	}
 	if err := tg.Upload(ctx, serverID, strings.NewReader(content), path); err != nil {
 		return mapExecErr(err)
 	}
-	if chRes, chErr := tg.Exec(ctx, serverID, []string{"chmod", "600", path}); chErr != nil {
+	if chRes, chErr := tg.Exec(ctx, serverID, settings.chmodCmd(path)); chErr != nil {
 		return mapExecErr(chErr)
 	} else {
 		_ = chRes
@@ -729,19 +771,19 @@ func writeExternalFragment(ctx context.Context, tg target.Service, serverID, con
 func verifyExternalImport(ctx context.Context, tg target.Service, serverID string, settings CaddySettings) error {
 	cfg := settings.EffectiveConfigPath()
 	frag := settings.FragmentPath()
-	catRes, err := tg.Exec(ctx, serverID, []string{"cat", cfg})
+	catRes, err := tg.Exec(ctx, serverID, settings.catCmd(cfg))
 	if err != nil {
 		return mapExecErr(err)
 	}
 	if catRes.ExitCode != 0 {
-		return fmt.Errorf("%w: 外接模式要求主 Caddyfile(%s)存在且可读,当前读取失败:%s", ErrExternalConfigImport, cfg, strings.TrimSpace(firstNonEmpty(catRes.Stderr, "exit "+strconv.Itoa(catRes.ExitCode))))
+		return fmt.Errorf("%w: 外接模式要求主 Caddyfile(%s)存在且可读,当前读取失败:%s%s", ErrExternalConfigImport, cfg, strings.TrimSpace(firstNonEmpty(catRes.Stderr, "exit "+strconv.Itoa(catRes.ExitCode))), settings.externalReadHint())
 	}
-	gr, gerr := tg.Exec(ctx, serverID, []string{"grep", "-q", "--", frag, cfg})
+	gr, gerr := tg.Exec(ctx, serverID, settings.grepCmd(frag, cfg))
 	if gerr != nil {
 		return mapExecErr(gerr)
 	}
 	if gr.ExitCode != 0 {
-		return fmt.Errorf("%w: 请在主 Caddyfile(%s)添加一行 `import %s`,AtomGo 写入的反代片段才会被加载", ErrExternalConfigImport, cfg, frag)
+		return fmt.Errorf("%w: 请在主 Caddyfile(%s)添加一行 `import %s`,AtomGo 写入的反代片段才会被加载%s", ErrExternalConfigImport, cfg, frag, settings.externalReadHint())
 	}
 	return nil
 }
@@ -753,12 +795,15 @@ func applyExternalCaddyfile(ctx context.Context, tg target.Service, serverID, co
 		return err
 	}
 	cfg := settings.EffectiveConfigPath()
-	// validate(best-effort:旧 caddy 无 validate 子命令时 looksUnsupported 跳过,不阻断 reload)。
-	val, err := tg.Exec(ctx, serverID, []string{"caddy", "validate", "--config", cfg, "--adapter", "caddyfile"})
+	// validate(best-effort:旧 caddy 无 validate 子命令(looksUnsupported)、宿主无 caddy 二进制
+	// (exit 127 / "command not found",宿主模式容器化 Caddy 未设容器名场景),或容器内 validate 失败但
+	// 非结构性错误时跳过,不阻断 reload;校验责任交还 `caddy reload`(它本就会先校验、非法配置拒绝替换
+	// 并回报非零)。其余真实校验错误仍上报。
+	val, err := tg.Exec(ctx, serverID, settings.validateCmd(cfg))
 	if err != nil {
 		return mapExecErr(err)
 	}
-	if val.ExitCode != 0 && !looksUnsupported(val.Stderr) {
+	if val.ExitCode != 0 && !caddyValidateSkippable(val) {
 		return enrichExternalApplyErr(content, fmt.Errorf("%w:%s", ErrApply, strings.TrimSpace(firstNonEmpty(val.Stderr, val.Stdout))))
 	}
 	// reload(触发用户主 Caddyfile 重新加载,含 import 的我们的片段)。
@@ -800,14 +845,14 @@ func InjectExternalImport(ctx context.Context, tg target.Service, serverID strin
 	line := "import " + frag
 	res := &ExternalImportResult{File: cfg, Line: line}
 
-	catRes, err := tg.Exec(ctx, serverID, []string{"cat", cfg})
+	catRes, err := tg.Exec(ctx, serverID, settings.catCmd(cfg))
 	if err != nil {
 		return nil, mapExecErr(err)
 	}
 	if catRes.ExitCode != 0 {
-		return nil, fmt.Errorf("%w: 外接模式要求主 Caddyfile(%s)存在且可读,当前读取失败:%s", ErrExternalConfigImport, cfg, strings.TrimSpace(firstNonEmpty(catRes.Stderr, "exit "+strconv.Itoa(catRes.ExitCode))))
+		return nil, fmt.Errorf("%w: 外接模式要求主 Caddyfile(%s)存在且可读,当前读取失败:%s%s", ErrExternalConfigImport, cfg, strings.TrimSpace(firstNonEmpty(catRes.Stderr, "exit "+strconv.Itoa(catRes.ExitCode))), settings.externalReadHint())
 	}
-	gr, gerr := tg.Exec(ctx, serverID, []string{"grep", "-q", "--", frag, cfg})
+	gr, gerr := tg.Exec(ctx, serverID, settings.grepCmd(frag, cfg))
 	if gerr != nil {
 		return nil, mapExecErr(gerr)
 	}
@@ -820,12 +865,12 @@ func InjectExternalImport(ctx context.Context, tg target.Service, serverID strin
 		return res, nil
 	}
 	// 确保片段目录存在 + 片段文件存在(缺失才写空片段),避免 import 指向缺失文件使 reload 失败。
-	if mkRes, mkErr := tg.Exec(ctx, serverID, []string{"mkdir", "-p", settings.EffectiveFragmentDir()}); mkErr != nil {
+	if mkRes, mkErr := tg.Exec(ctx, serverID, settings.mkdirCmd(settings.EffectiveFragmentDir())); mkErr != nil {
 		return nil, mapExecErr(mkErr)
 	} else if mkRes.ExitCode != 0 {
 		return nil, fmt.Errorf("%w:%s", ErrApply, strings.TrimSpace(firstNonEmpty(mkRes.Stderr, mkRes.Stdout)))
 	}
-	testRes, testErr := tg.Exec(ctx, serverID, []string{"test", "-f", frag})
+	testRes, testErr := tg.Exec(ctx, serverID, settings.testCmd(frag))
 	if testErr != nil {
 		return nil, mapExecErr(testErr)
 	}
@@ -867,31 +912,79 @@ func enrichExternalApplyErr(content string, base error) error {
 	return fmt.Errorf("%s —— 配置用到了 TCP 透传(layer4),而当前外接 Caddy 可能未含 caddy-l4 插件;如需该能力请为你的 Caddy 加装 mholt/caddy-l4 插件,或经 ATOMGO_CADDY_IMAGE 指向一个自带该插件的镜像", base.Error())
 }
 
-// ProxyModeInfo 是反代运行模式的对外只读快照(供前端展示外接模式的路径与 reload 命令)。
+// ProxyModeInfo 是反代运行模式的对外只读快照(供前端展示外接模式的路径与 reload 命令,及托管模式资源缺省)。
 type ProxyModeInfo struct {
 	Mode        string `json:"mode"`
 	ConfigPath  string `json:"configPath"`
 	FragmentDir string `json:"fragmentDir"`
 	ReloadCmd   string `json:"reloadCmd"`
+	// ExternalCaddyContainer 是外接模式下用户 Caddy 所在容器名(容器化 Caddy 场景);空 = 宿主文件模式。
+	ExternalCaddyContainer string `json:"externalCaddyContainer"`
+	Network                string `json:"network"`
+	ContainerName          string `json:"containerName"`
+	DataVolume             string `json:"dataVolume"`
+	ConfigVolume           string `json:"configVolume"`
 }
 
 // CaddySettings 是一台目标主机的反代运行模式及其外接路径(档位 B:可按服务器覆盖全局缺省)。
-// 全局 env(ATOMGO_PROXY_MODE / ATOMGO_CADDY_EXTERNAL_*)是进程级缺省;server_proxy_settings 表可按
-// 服务器覆盖。空字段表示「回退全局缺省」(覆盖逐字段生效)。
+// 全局 env(ATOMGO_PROXY_MODE / ATOMGO_CADDY_EXTERNAL_* / ATOMGO_CADDY_*)是进程级缺省;
+// server_proxy_settings 表可按服务器覆盖。空字段表示「回退全局缺省」(覆盖逐字段生效)。
 type CaddySettings struct {
 	Mode        string // modeManaged | modeExternal;空 → 全局缺省。
 	ConfigPath  string // 外接:用户主 Caddyfile 路径;空 → 全局缺省。
 	FragmentDir string // 外接:AtomGo 写反代片段的目录;空 → 全局缺省。
 	ReloadCmd   string // 外接:触发 reload 的命令(空格分隔);空 → 全局缺省(caddy reload)。
+	// ExternalCaddyContainer 是外接模式下「用户 Caddy 所在容器名」(容器化 Caddy 场景)。
+	// 空 → 宿主文件系统模式(默认,要求 Caddyfile / 片段目录已 bind-mount 到宿主);非空 → 容器内模式
+	// (cat/grep/mkdir/test/写片段 都经 `docker exec <容器>`,默认 reload 也走 `docker exec`)。
+	ExternalCaddyContainer string
+	// 以下为「托管模式」资源可配置项:空 → 全局缺省(对应下方默认常量);按服务器覆盖逐字段生效。
+	// 用于多实例 / 多租户同宿主时隔离网络、容器名与持久卷,避免碰撞。
+	Network       string // 托管 Caddy 与上游容器共享的 docker 网络名。
+	ContainerName string // 托管的反代容器名(每主机一个,幂等创建)。
+	DataVol       string // 证书 / ACME 账户持久卷名。
+	ConfigVol     string // Caddy 自动持久化配置卷名。
+}
+
+// CaddyResources 是 managed 模式 atomgo-caddy 容器的资源覆盖(网络 / 容器名 / 两卷)。
+// 部署请求可内联携带(「保存 + 部署」一步完成,不再要求先单独保存);空字段 = 回退全局缺省。
+type CaddyResources struct {
+	Network       string
+	ContainerName string
+	DataVol       string
+	ConfigVol     string
+}
+
+// Any 报告是否至少携带了一个非空资源字段(全空 = 不写库,按已存设置部署)。
+func (r CaddyResources) Any() bool {
+	return strings.TrimSpace(r.Network) != "" || strings.TrimSpace(r.ContainerName) != "" ||
+		strings.TrimSpace(r.DataVol) != "" || strings.TrimSpace(r.ConfigVol) != ""
+}
+
+// validateCaddyResourceNames 校验网络名 / 容器名(docker 名称字符集,首字符非 `-` 防 flag 注入,
+// 且拒绝空白 —— 空格会破坏 docker argv 边界语义之外的 shell 直读场景)。卷名语法复杂(支持
+// bind mount / :ro 后缀)交由 docker 自身报错,此处不校验(与 PUT server-settings 既有口径一致)。
+func validateCaddyResourceNames(network, containerName string) error {
+	for _, v := range []string{network, containerName} {
+		if v != "" && !containerRe.MatchString(v) {
+			return ErrInvalidCaddyResource
+		}
+	}
+	return nil
 }
 
 // globalCaddySettings 由进程级 env 取「全局缺省」反代设置(向后兼容:未配 server_proxy_settings 时即此值)。
 func globalCaddySettings() CaddySettings {
 	return CaddySettings{
-		Mode:        proxyMode(),
-		ConfigPath:  externalConfigPath(),
-		FragmentDir: externalFragmentDir(),
-		ReloadCmd:   strings.Join(externalReloadArgs(), " "),
+		Mode:                   proxyMode(),
+		ConfigPath:             externalConfigPath(),
+		FragmentDir:            externalFragmentDir(),
+		ReloadCmd:              os.Getenv(externalReloadCmdEnv),
+		ExternalCaddyContainer: os.Getenv(externalCaddyContainerEnv),
+		Network:                os.Getenv(caddyNetworkEnv),
+		ContainerName:          os.Getenv(caddyContainerEnv),
+		DataVol:                os.Getenv(caddyDataVolEnv),
+		ConfigVol:              os.Getenv(caddyConfigVolEnv),
 	}
 }
 
@@ -920,26 +1013,113 @@ func (s CaddySettings) EffectiveFragmentDir() string {
 }
 
 // EffectiveReloadArgs 返回生效 reload 命令(argv);空 → `caddy reload --config <主> --adapter caddyfile`。
+// 容器化 Caddy(设了 ExternalCaddyContainer)且未显式配 ReloadCmd 时,默认走 `docker exec <容器> caddy reload ...`。
 func (s CaddySettings) EffectiveReloadArgs() []string {
 	if strings.TrimSpace(s.ReloadCmd) != "" {
 		return strings.Fields(s.ReloadCmd)
 	}
+	if c := strings.TrimSpace(s.ExternalCaddyContainer); c != "" {
+		return []string{"docker", "exec", c, "caddy", "reload", "--config", s.EffectiveConfigPath(), "--adapter", "caddyfile"}
+	}
 	return []string{"caddy", "reload", "--config", s.EffectiveConfigPath(), "--adapter", "caddyfile"}
 }
 
-// FragmentPath 返回 AtomGo 写反代片段的完整主机路径(目录 + 片段文件名)。
+// EffectiveExternalCaddyContainer 返回生效的「用户 Caddy 容器名」(空 → 宿主模式)。
+func (s CaddySettings) EffectiveExternalCaddyContainer() string {
+	return strings.TrimSpace(s.ExternalCaddyContainer)
+}
+
+// EffectiveNetwork 返回生效共享网络名(空 → 默认 atomgo-proxy)。
+func (s CaddySettings) EffectiveNetwork() string {
+	if v := strings.TrimSpace(s.Network); v != "" {
+		return v
+	}
+	return proxyNetwork
+}
+
+// EffectiveContainerName 返回生效托管反代容器名(空 → 默认 atomgo-caddy)。
+func (s CaddySettings) EffectiveContainerName() string {
+	if v := strings.TrimSpace(s.ContainerName); v != "" {
+		return v
+	}
+	return caddyContainer
+}
+
+// EffectiveDataVol 返回生效证书 / ACME 持久卷名(空 → 默认 atomgo_caddy_data)。
+func (s CaddySettings) EffectiveDataVol() string {
+	if v := strings.TrimSpace(s.DataVol); v != "" {
+		return v
+	}
+	return caddyDataVol
+}
+
+// EffectiveConfigVol 返回生效 Caddy 自动配置持久卷名(空 → 默认 atomgo_caddy_config)。
+func (s CaddySettings) EffectiveConfigVol() string {
+	if v := strings.TrimSpace(s.ConfigVol); v != "" {
+		return v
+	}
+	return caddyConfigVol
+}
+
+// FragmentPath 返回 AtomGo 写反代片段的完整路径(目录 + 片段文件名)。
 func (s CaddySettings) FragmentPath() string {
 	return s.EffectiveFragmentDir() + "/" + externalFragmentFile
+}
+
+// execPrefix 返回「容器化 Caddy」模式下执行容器内命令的 argv 前缀;宿主模式下为空(原样执行)。
+// 用于让外接模式的文件操作(cat/grep/mkdir/test/chmod)直接针对容器内文件系统,免去 bind-mount。
+func (s CaddySettings) execPrefix() []string {
+	if c := s.EffectiveExternalCaddyContainer(); c != "" {
+		return []string{"docker", "exec", c}
+	}
+	return nil
+}
+
+// catCmd / grepCmd / mkdirCmd / testCmd / chmodCmd 是容器感知的文件操作 argv 构造器:
+// 设了 Caddy 容器名 → 经 `docker exec <容器>`;否则在宿主原样执行。
+func (s CaddySettings) catCmd(path string) []string {
+	return append(s.execPrefix(), "cat", path)
+}
+func (s CaddySettings) grepCmd(pattern, path string) []string {
+	return append(s.execPrefix(), "grep", "-q", "--", pattern, path)
+}
+func (s CaddySettings) mkdirCmd(dir string) []string {
+	return append(s.execPrefix(), "mkdir", "-p", dir)
+}
+func (s CaddySettings) testCmd(path string) []string {
+	return append(s.execPrefix(), "test", "-f", path)
+}
+func (s CaddySettings) chmodCmd(path string) []string {
+	return append(s.execPrefix(), "chmod", "600", path)
+}
+
+// validateCmd 是容器感知的 caddy validate argv(容器内模式 → docker exec)。
+func (s CaddySettings) validateCmd(cfg string) []string {
+	return append(s.execPrefix(), "caddy", "validate", "--config", cfg, "--adapter", "caddyfile")
+}
+
+// externalReadHint 在宿主模式且 cat/grep 失败时报错文本里追加「可能 Caddy 在容器内」的提示;
+// 容器模式(已设容器名)则不追加。
+func (s CaddySettings) externalReadHint() string {
+	if s.EffectiveExternalCaddyContainer() != "" {
+		return ""
+	}
+	return "；若主 Caddyfile 位于容器内，请在反代设置的「Caddy 容器名」中填写您的 Caddy 容器名"
 }
 
 // GetProxyModeInfo 返回当前反代模式及外接模式相关的路径/命令(全局只读,无副作用)。
 func GetProxyModeInfo() ProxyModeInfo {
 	g := globalCaddySettings()
 	return ProxyModeInfo{
-		Mode:        g.EffectiveMode(),
-		ConfigPath:  g.EffectiveConfigPath(),
-		FragmentDir: g.EffectiveFragmentDir(),
-		ReloadCmd:   strings.Join(g.EffectiveReloadArgs(), " "),
+		Mode:                   g.EffectiveMode(),
+		ConfigPath:             g.EffectiveConfigPath(),
+		FragmentDir:            g.EffectiveFragmentDir(),
+		ReloadCmd:              strings.Join(g.EffectiveReloadArgs(), " "),
+		ExternalCaddyContainer: g.EffectiveExternalCaddyContainer(),
+		Network:                g.EffectiveNetwork(),
+		ContainerName:          g.EffectiveContainerName(),
+		DataVolume:             g.EffectiveDataVol(),
+		ConfigVolume:           g.EffectiveConfigVol(),
 	}
 }
 

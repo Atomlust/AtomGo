@@ -186,16 +186,18 @@ func main() {
 	// prober 传 nil → 使用默认 go-git ListRemote 实现(纯 Go,无宿主 git 依赖,不驻留)。
 	projectSvc := project.New(st.DB, credVault, nil)
 
+	// 装配构建/部署配置服务(Story 2.4):独立于 2-2 spec;经 vault 校验 secret 引用存在性 +
+	// 回算掩码。master key 未配置时,涉及 secret 引用的保存降级为明确错误(不 panic)。
+	// 必须在 triggerSvc 之前声明(trigger 保存时校验分支映射引用的环境需它)。
+	pipelineSettingsSvc := pipeline.NewSettingsService(st.DB, credVault)
+
 	// 装配触发配置服务(Story 2.3):复用 vault secretbox(master key)加密 webhook 签名密钥。
-	// master key 未配置时,涉及密钥的读取/重置降级为明确错误(不 panic)。
-	triggerSvc := trigger.New(st.DB, credVault)
+	// master key 未配置时,涉及密钥的读取/重置降级为明确错误(不 panic)。注入 pipelineSettingsSvc
+	// 用于保存时校验分支映射的 EnvironmentID 指向有效环境(根治#)。
+	triggerSvc := trigger.New(st.DB, credVault, trigger.WithSettings(pipelineSettingsSvc))
 
 	// 装配流水线配置服务(Story 2.2):经 store 触库,惰性默认 + spec 校验 + YAML 渲染。
 	pipelineSvc := pipeline.New(st.DB)
-
-	// 装配构建/部署配置服务(Story 2.4):独立于 2-2 spec;经 vault 校验 secret 引用存在性 +
-	// 回算掩码。master key 未配置时,涉及 secret 引用的保存降级为明确错误(不 panic)。
-	pipelineSettingsSvc := pipeline.NewSettingsService(st.DB, credVault)
 
 	// 装配定时(cron)触发配置服务(Story 8-6):每项目一份 cron 表达式 + 分支 + 启用开关。
 	// 调度器(下方,pool 后)按启用配置分钟粒度扫描、到点经 run.Service 创建「定时」触发的运行。

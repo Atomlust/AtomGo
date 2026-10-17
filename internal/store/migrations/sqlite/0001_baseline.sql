@@ -521,6 +521,11 @@ CREATE TABLE IF NOT EXISTS "server_proxy_settings" (
     "external_config_path" TEXT NOT NULL DEFAULT '',
     "external_fragment_dir" TEXT NOT NULL DEFAULT '',
     "external_reload_cmd" TEXT NOT NULL DEFAULT '',
+    "caddy_external_container" TEXT NOT NULL DEFAULT '',
+    "caddy_network" TEXT NOT NULL DEFAULT '',
+    "caddy_container" TEXT NOT NULL DEFAULT '',
+    "caddy_data_volume" TEXT NOT NULL DEFAULT '',
+    "caddy_config_volume" TEXT NOT NULL DEFAULT '',
     "updated_at" TEXT NOT NULL DEFAULT ''
 );
 

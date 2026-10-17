@@ -710,6 +710,11 @@ CREATE TABLE "public"."server_proxy_settings" (
     "external_config_path" "text" DEFAULT ''::"text" NOT NULL,
     "external_fragment_dir" "text" DEFAULT ''::"text" NOT NULL,
     "external_reload_cmd" "text" DEFAULT ''::"text" NOT NULL,
+    "caddy_external_container" "text" DEFAULT ''::"text" NOT NULL,
+    "caddy_network" "text" DEFAULT ''::"text" NOT NULL,
+    "caddy_container" "text" DEFAULT ''::"text" NOT NULL,
+    "caddy_data_volume" "text" DEFAULT ''::"text" NOT NULL,
+    "caddy_config_volume" "text" DEFAULT ''::"text" NOT NULL,
     "updated_at" character varying(32) DEFAULT ''::character varying NOT NULL
 );
 

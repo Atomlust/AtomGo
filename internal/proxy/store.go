@@ -355,10 +355,12 @@ func scanRoute(sc scanner) (*Route, error) {
 // getServerProxySettings 读取某服务器的反代覆盖设置;无行 → 返回 nil(调用方回退全局缺省)。
 func (s *Store) getServerProxySettings(ctx context.Context, serverID string) (*CaddySettings, error) {
 	row := s.db.QueryRowContext(ctx,
-		`SELECT mode, external_config_path, external_fragment_dir, external_reload_cmd
+		`SELECT mode, external_config_path, external_fragment_dir, external_reload_cmd, caddy_external_container,
+		        caddy_network, caddy_container, caddy_data_volume, caddy_config_volume
 		 FROM server_proxy_settings WHERE server_id = ?`, serverID)
 	var st CaddySettings
-	if err := row.Scan(&st.Mode, &st.ConfigPath, &st.FragmentDir, &st.ReloadCmd); err != nil {
+	if err := row.Scan(&st.Mode, &st.ConfigPath, &st.FragmentDir, &st.ReloadCmd, &st.ExternalCaddyContainer,
+		&st.Network, &st.ContainerName, &st.DataVol, &st.ConfigVol); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
 		}
@@ -385,9 +387,11 @@ func (s *Store) upsertServerProxySettings(ctx context.Context, serverID string, 
 	if exists > 0 {
 		if _, err := s.db.ExecContext(ctx,
 			`UPDATE server_proxy_settings
-			   SET mode = ?, external_config_path = ?, external_fragment_dir = ?, external_reload_cmd = ?, updated_at = ?
+			   SET mode = ?, external_config_path = ?, external_fragment_dir = ?, external_reload_cmd = ?, caddy_external_container = ?,
+			       caddy_network = ?, caddy_container = ?, caddy_data_volume = ?, caddy_config_volume = ?, updated_at = ?
 			 WHERE server_id = ?`,
-			mode, st.ConfigPath, st.FragmentDir, st.ReloadCmd, now, serverID,
+			mode, st.ConfigPath, st.FragmentDir, st.ReloadCmd, st.ExternalCaddyContainer,
+			st.Network, st.ContainerName, st.DataVol, st.ConfigVol, now, serverID,
 		); err != nil {
 			return fmt.Errorf("proxy: update server proxy settings: %w", err)
 		}
@@ -395,9 +399,11 @@ func (s *Store) upsertServerProxySettings(ctx context.Context, serverID string, 
 	}
 	if _, err := s.db.ExecContext(ctx,
 		`INSERT INTO server_proxy_settings
-		   (server_id, mode, external_config_path, external_fragment_dir, external_reload_cmd, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?)`,
-		serverID, mode, st.ConfigPath, st.FragmentDir, st.ReloadCmd, now,
+		   (server_id, mode, external_config_path, external_fragment_dir, external_reload_cmd, caddy_external_container,
+		    caddy_network, caddy_container, caddy_data_volume, caddy_config_volume, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		serverID, mode, st.ConfigPath, st.FragmentDir, st.ReloadCmd, st.ExternalCaddyContainer,
+		st.Network, st.ContainerName, st.DataVol, st.ConfigVol, now,
 	); err != nil {
 		return fmt.Errorf("proxy: insert server proxy settings: %w", err)
 	}

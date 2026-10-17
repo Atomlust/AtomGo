@@ -76,6 +76,11 @@ func (s *stubProxyService) PrepareCaddy(_ context.Context, serverID string) (*pr
 	}
 	return &proxy.CaddyStatus{ServerID: serverID}, nil
 }
+
+// PrepareCaddyWithResources 桩:带资源时捕获 serverID 后走同一固定返回(handler 按 res.Any() 选路)。
+func (s *stubProxyService) PrepareCaddyWithResources(ctx context.Context, serverID string, _ proxy.CaddyResources) (*proxy.CaddyStatus, error) {
+	return s.PrepareCaddy(ctx, serverID)
+}
 func (s *stubProxyService) GetServerCaddySettings(_ context.Context, serverID string) (*proxy.CaddySettings, error) {
 	return &proxy.CaddySettings{Mode: "managed"}, nil
 }

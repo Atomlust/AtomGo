@@ -80,6 +80,8 @@ var (
 	ErrApply = errors.New("proxy: 应用反代配置失败")
 	// ErrExternalConfigImport 表示外接模式下用户主 Caddyfile 缺失或未 import 我们的反代片段。
 	ErrExternalConfigImport = errors.New("proxy: 外接模式要求主 Caddyfile 含 AtomGo 反代片段的 import")
+	// ErrInvalidCaddyResource 表示托管模式资源覆盖(网络/容器名)含非法字符。
+	ErrInvalidCaddyResource = errors.New("proxy: invalid caddy resource name")
 	// ErrNotExternalMode 表示「自动注入 import 行」等操作仅在外接(external)模式下有意义。
 	ErrNotExternalMode = errors.New("proxy: 该操作仅在外接 Caddy 模式下可用,请先将本机反代模式设为 external")
 
@@ -266,6 +268,10 @@ type Service interface {
 	// PrepareCaddy 显式部署反代环境(ensureCaddy)而无需先绑域名,返回部署后的 CaddyStatus。
 	// 空 serverID → ErrEmptyServerID;80/443 冲突等人话错误由 ensureCaddy 透出。
 	PrepareCaddy(ctx context.Context, serverID string) (*CaddyStatus, error)
+	// PrepareCaddyWithResources 先保存 managed 资源覆盖(仅网络/容器名/两卷 4 字段,其余既有
+	// 覆盖字段不动),再立即部署 —— 「设置部署信息 → 点部署」一步完成,不再要求先单独保存。
+	// 全空资源 = 不写库直接按已存设置部署(等价 PrepareCaddy)。资源名非法 → ErrInvalidCaddyResource。
+	PrepareCaddyWithResources(ctx context.Context, serverID string, res CaddyResources) (*CaddyStatus, error)
 	// RemoveCaddy 停止并删除某主机上的反代容器(atomgo-caddy);保留命名卷(避免重签触发 LE 限速)。
 	// 幂等:容器已不存在也成功。
 	RemoveCaddy(ctx context.Context, serverID string) error
@@ -397,6 +403,12 @@ func (s *service) probeCaddyCertViaSSH(ctx context.Context, serverID, domain str
 	if s.tg == nil || strings.TrimSpace(serverID) == "" {
 		return ProbeResult{}, false
 	}
+	// 容器名可经全局 env / 按服务器设置覆盖(托管模式资源可配置);解析失败 → 回退公网探测。
+	settings, serr := s.resolveCaddySettings(ctx, serverID)
+	if serr != nil {
+		return ProbeResult{}, false
+	}
+	container := settings.EffectiveContainerName()
 	// 通配符 *.example.com 的证书存为目录/文件名 wildcard_.example.com。
 	// 注:创建/更新路由时已拒绝通配符域名(ErrWildcardUnsupported),此分支仅为历史存量数据兜底。
 	name := domain
@@ -406,7 +418,7 @@ func (s *service) probeCaddyCertViaSSH(ctx context.Context, serverID, domain str
 	// 跨各 CA 目录 glob 该域名的叶子证书;仅 cat 公钥证书(.crt),绝不读 .key 私钥。
 	certGlob := "/data/caddy/certificates/*/" + name + "/" + name + ".crt"
 	out, err := s.tg.Exec(ctx, serverID, []string{
-		"docker", "exec", caddyContainer, "sh", "-c", "cat " + certGlob + " 2>/dev/null",
+		"docker", "exec", container, "sh", "-c", "cat " + certGlob + " 2>/dev/null",
 	})
 	if err != nil || out == nil {
 		return ProbeResult{}, false // 传输层错误(SSH 不可达等)→ 回退
@@ -647,6 +659,23 @@ func (s *service) resolveCaddySettings(ctx context.Context, serverID string) (Ca
 	if strings.TrimSpace(row.ReloadCmd) != "" {
 		g.ReloadCmd = row.ReloadCmd
 	}
+	// 外接模式:用户 Caddy 所在容器名(容器化 Caddy 场景)按服务器覆盖。
+	if strings.TrimSpace(row.ExternalCaddyContainer) != "" {
+		g.ExternalCaddyContainer = row.ExternalCaddyContainer
+	}
+	// 托管模式资源(网络 / 容器 / 卷)按服务器覆盖;空字段回退全局缺省(对应默认常量)。
+	if strings.TrimSpace(row.Network) != "" {
+		g.Network = row.Network
+	}
+	if strings.TrimSpace(row.ContainerName) != "" {
+		g.ContainerName = row.ContainerName
+	}
+	if strings.TrimSpace(row.DataVol) != "" {
+		g.DataVol = row.DataVol
+	}
+	if strings.TrimSpace(row.ConfigVol) != "" {
+		g.ConfigVol = row.ConfigVol
+	}
 	return g, nil
 }
 
@@ -703,6 +732,42 @@ func (s *service) PrepareCaddy(ctx context.Context, serverID string) (*CaddyStat
 		return nil, err
 	}
 	return s.CaddyStatus(ctx, serverID)
+}
+
+// PrepareCaddyWithResources 见接口注释:资源覆盖落库(仅 4 个资源字段,其余既有覆盖保留 —— 读原始
+// 覆盖行而非生效值,避免把全局缺省「钉死」成逐服务器覆盖)后立即部署。
+func (s *service) PrepareCaddyWithResources(ctx context.Context, serverID string, res CaddyResources) (*CaddyStatus, error) {
+	serverID = strings.TrimSpace(serverID)
+	if serverID == "" {
+		return nil, ErrEmptyServerID
+	}
+	if _, err := s.tg.Get(ctx, serverID); err != nil {
+		return nil, err
+	}
+	res.Network = strings.TrimSpace(res.Network)
+	res.ContainerName = strings.TrimSpace(res.ContainerName)
+	res.DataVol = strings.TrimSpace(res.DataVol)
+	res.ConfigVol = strings.TrimSpace(res.ConfigVol)
+	if res.Any() {
+		if err := validateCaddyResourceNames(res.Network, res.ContainerName); err != nil {
+			return nil, err
+		}
+		stored, err := s.store.getServerProxySettings(ctx, serverID)
+		if err != nil {
+			return nil, err
+		}
+		if stored == nil {
+			stored = &CaddySettings{}
+		}
+		stored.Network = res.Network
+		stored.ContainerName = res.ContainerName
+		stored.DataVol = res.DataVol
+		stored.ConfigVol = res.ConfigVol
+		if err := s.store.upsertServerProxySettings(ctx, serverID, *stored); err != nil {
+			return nil, err
+		}
+	}
+	return s.PrepareCaddy(ctx, serverID)
 }
 
 // upstreamForConnect 返回需接入共享网络的容器名:container 上游返回容器名;address 上游返回 ""

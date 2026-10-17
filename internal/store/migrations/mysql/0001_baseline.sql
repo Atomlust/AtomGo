@@ -836,6 +836,11 @@ CREATE TABLE `server_proxy_settings` (
   `external_config_path` text NOT NULL,
   `external_fragment_dir` text NOT NULL,
   `external_reload_cmd` text NOT NULL,
+  `caddy_external_container` text NOT NULL,
+  `caddy_network` text NOT NULL,
+  `caddy_container` text NOT NULL,
+  `caddy_data_volume` text NOT NULL,
+  `caddy_config_volume` text NOT NULL,
   `updated_at` varchar(32) NOT NULL,
   PRIMARY KEY (`server_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;

@@ -299,6 +299,32 @@ export interface ProxyModeInfo {
   fragmentDir: string
   /** Reload command AtomGo runs in external mode. */
   reloadCmd: string
+  /**
+   * External-mode user Caddy container name (containerized Caddy scenario). Empty = host-file mode
+   * (the Caddyfile / fragment dir must be bind-mounted to the host). When set, all file ops + the
+   * default reload go through `docker exec <container>`, so no bind-mount is needed.
+   */
+  externalCaddyContainer: string
+  /** Managed-mode Caddy Docker network (global default `atomgo-proxy`). */
+  network: string
+  /** Managed-mode Caddy container name (global default `atomgo-caddy`). */
+  containerName: string
+  /** Managed-mode Caddy data volume (global default). */
+  dataVolume: string
+  /** Managed-mode Caddy config volume (global default). */
+  configVolume: string
+}
+
+/**
+ * Managed-mode Caddy resource overrides (docker network / container name /
+ * data & config volumes), carried inline on the deploy request so "save +
+ * deploy" is one action. Empty fields fall back to the global defaults.
+ */
+export interface CaddyResources {
+  network?: string
+  containerName?: string
+  dataVolume?: string
+  configVolume?: string
 }
 
 /**
@@ -319,10 +345,18 @@ export async function getCaddyStatus(serverId: string): Promise<CaddyStatus> {
  * the same act otherwise done implicitly on first bind, surfaced explicitly here.
  * Returns the refreshed status (should reflect installed + running).
  *
+ * `resources` (optional, managed mode): per-host overrides for the docker
+ * network / container name / data & config volumes. When any field is set the
+ * backend persists them first and deploys in the same request — "set + deploy"
+ * in one click; empty/omitted deploys with the already-saved settings.
+ *
  * POST /api/proxy/caddy?serverId=<id> → CaddyStatus   (needs CSRF)
  */
-export async function prepareCaddyEnv(serverId: string): Promise<CaddyStatus> {
-  return http.post<CaddyStatus>(`/api/proxy/caddy?serverId=${encodeURIComponent(serverId)}`, {})
+export async function prepareCaddyEnv(serverId: string, resources?: CaddyResources): Promise<CaddyStatus> {
+  const body = resources?.network || resources?.containerName || resources?.dataVolume || resources?.configVolume
+    ? resources
+    : {}
+  return http.post<CaddyStatus>(`/api/proxy/caddy?serverId=${encodeURIComponent(serverId)}`, body)
 }
 
 /**
@@ -364,6 +398,16 @@ export interface ServerCaddySettings {
   fragmentDir: string
   /** Reload command AtomGo runs in external mode. */
   reloadCmd: string
+  /** External-mode user Caddy container name (effective value; empty = host-file mode). */
+  externalCaddyContainer: string
+  /** Managed-mode Caddy Docker network (effective value; empty = global default). */
+  network: string
+  /** Managed-mode Caddy container name (effective value; empty = global default). */
+  containerName: string
+  /** Managed-mode Caddy data volume (effective value; empty = global default). */
+  dataVolume: string
+  /** Managed-mode Caddy config volume (effective value; empty = global default). */
+  configVolume: string
 }
 
 /**
@@ -397,7 +441,25 @@ export async function getServerCaddySettings(serverId: string): Promise<ServerCa
  */
 export async function setServerCaddySettings(
   serverId: string,
-  body: { mode?: 'managed' | 'external'; configPath?: string; fragmentDir?: string; reloadCmd?: string },
+  body: {
+    mode?: 'managed' | 'external'
+    configPath?: string
+    fragmentDir?: string
+    reloadCmd?: string
+    /**
+     * External-mode user Caddy container name (empty = fall back to host-file mode). When set,
+     * all file ops + the default reload go through `docker exec <container>` (no bind-mount needed).
+     */
+    externalCaddyContainer?: string
+    /** Managed-mode Caddy Docker network (empty = fall back to global default). */
+    network?: string
+    /** Managed-mode Caddy container name (empty = fall back to global default). */
+    containerName?: string
+    /** Managed-mode Caddy data volume (empty = fall back to global default). */
+    dataVolume?: string
+    /** Managed-mode Caddy config volume (empty = fall back to global default). */
+    configVolume?: string
+  },
 ): Promise<ServerCaddySettings> {
   return http.put<ServerCaddySettings>(`/api/proxy/server-settings?serverId=${encodeURIComponent(serverId)}`, body)
 }
