@@ -321,6 +321,77 @@ func TestUpdateRebindCredentialReprobes(t *testing.T) {
 	}
 }
 
+// TestUpdateRefreshesDefaultBranch 断言:普通保存(改名)且未显式传默认分支时,
+// 后端会 best-effort 重新探测远端 HEAD 并把 default_branch 刷新为最新值。
+func TestUpdateRefreshesDefaultBranch(t *testing.T) {
+	db := testDB(t)
+	v := vault.New(db, testMasterKey())
+	// 创建时远端默认分支是 main,保存时远端已变更为 develop。
+	pr := &stubProber{branch: "main"}
+	svc := New(db, v, pr)
+	credID := newCred(t, v, "tok")
+	p, _ := svc.Create(context.Background(), CreateInput{Name: "x", RepoURL: "https://g/a.git", CredentialID: credID})
+
+	pr.branch = "develop"
+	newName := "renamed"
+	updated, err := svc.Update(context.Background(), p.ID, UpdateInput{Name: &newName})
+	if err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	if updated.DefaultBranch != "develop" {
+		t.Fatalf("保存后应刷新默认分支为 develop, got %q", updated.DefaultBranch)
+	}
+	if updated.Name != "renamed" {
+		t.Fatalf("name = %q, want renamed", updated.Name)
+	}
+}
+
+// TestUpdateRefreshKeepsOldWhenProbeFails 断言:刷新探测失败时(如网络抖动)保留旧值,
+// 且保存本身不报错。
+func TestUpdateRefreshKeepsOldWhenProbeFails(t *testing.T) {
+	db := testDB(t)
+	v := vault.New(db, testMasterKey())
+	// 创建时用可用探针(main);保存前再让刷新探测失败,验证不阻断保存且保留旧值。
+	pr := &stubProber{branch: "main"}
+	svc := New(db, v, pr)
+	credID := newCred(t, v, "tok")
+	p, err := svc.Create(context.Background(), CreateInput{Name: "x", RepoURL: "https://g/a.git", CredentialID: credID})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	pr.err = ErrRepoUnreachable
+
+	newName := "renamed"
+	updated, err := svc.Update(context.Background(), p.ID, UpdateInput{Name: &newName})
+	if err != nil {
+		t.Fatalf("刷新失败不应阻断保存: %v", err)
+	}
+	if updated.DefaultBranch != "main" {
+		t.Fatalf("探测失败时 default_branch 应保留旧值 main, got %q", updated.DefaultBranch)
+	}
+}
+
+// TestUpdateExplicitDefaultBranchWinsOverRefresh 断言:显式传 defaultBranch 时,
+// 即使远端 HEAD 不同,也以用户指定值为准,不被刷新覆盖。
+func TestUpdateExplicitDefaultBranchWinsOverRefresh(t *testing.T) {
+	db := testDB(t)
+	v := vault.New(db, testMasterKey())
+	pr := &stubProber{branch: "main"}
+	svc := New(db, v, pr)
+	credID := newCred(t, v, "tok")
+	p, _ := svc.Create(context.Background(), CreateInput{Name: "x", RepoURL: "https://g/a.git", CredentialID: credID})
+
+	pr.branch = "develop" // 远端已变,但用户显式指定 release
+	explicit := "release"
+	updated, err := svc.Update(context.Background(), p.ID, UpdateInput{DefaultBranch: &explicit})
+	if err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	if updated.DefaultBranch != "release" {
+		t.Fatalf("显式 defaultBranch 应优先, got %q", updated.DefaultBranch)
+	}
+}
+
 func TestDeleteAndNotFound(t *testing.T) {
 	db := testDB(t)
 	v := vault.New(db, testMasterKey())

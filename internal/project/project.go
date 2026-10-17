@@ -334,17 +334,32 @@ func (s *service) Update(ctx context.Context, id string, in UpdateInput) (*Proje
 		name = *in.Name
 	}
 	if in.DefaultBranch != nil {
+		// 显式指定 → 以用户意图为准,不覆盖(也跳过刷新)。
 		defaultBranch = *in.DefaultBranch
 	}
 	if in.CredentialID != nil {
 		if *in.CredentialID == "" {
 			return nil, ErrEmptyCredentialID
 		}
-		// 改绑凭据:用新凭据对(可能也已更新的)仓库做 ls-remote 校验。
-		if _, err := s.probe(ctx, repoURL, *in.CredentialID); err != nil {
-			return nil, err
+		// 改绑凭据:用新凭据对仓库做 ls-remote 校验,并同步远端默认分支(HEAD)。
+		branch, perr := s.probe(ctx, repoURL, *in.CredentialID)
+		if perr != nil {
+			return nil, perr
 		}
 		credentialID = *in.CredentialID
+		// 未显式指定默认分支时,以探测到的远端 HEAD 为准。
+		if in.DefaultBranch == nil {
+			defaultBranch = branch
+		}
+	} else if in.DefaultBranch == nil {
+		// 普通保存(改名 / 切开关等)且未显式指定默认分支:best-effort 重新探测远端
+		// HEAD 刷新默认分支,使其与仓库当前默认分支保持同步。探测失败(网络抖动 /
+		// 凭据缺失)则保留旧值,不阻断本次保存。
+		if credentialID != "" {
+			if branch, perr := s.probe(ctx, repoURL, credentialID); perr == nil && branch != "" {
+				defaultBranch = branch
+			}
+		}
 	}
 	if in.PacEnabled != nil {
 		pacEnabled = *in.PacEnabled
