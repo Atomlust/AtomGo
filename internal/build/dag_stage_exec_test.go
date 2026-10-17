@@ -576,6 +576,92 @@ func TestRunDeployJobPassesImageParams(t *testing.T) {
 	}
 }
 
+// TestRunDeployJobFallsBackToResolvedServers 证 C 项收口:节点未指定 serverId 时,
+// 回退到本次 run 解析出的环境目标机(Trigger.ResolvedTargetServerIDs),而非直接失败。
+func TestRunDeployJobFallsBackToResolvedServers(t *testing.T) {
+	dep := &stubStageDeployer{}
+	b := &Builder{deployer: dep}
+	rep := &fakeReporter{}
+	jb := pipeline.Job{ID: "d", Name: "部署", Type: "deploy_ssh", Config: map[string]any{
+		"artifactType": "image",
+	}}
+	r := &run.Run{ID: "run-1", Trigger: run.Trigger{
+		ResolvedEnvironment:     "测试/生产",
+		ResolvedTargetServerIDs: []string{"srv-a", "srv-b"},
+	}}
+	if err := b.runDeployJob(context.Background(), rep, jb, r); err != nil {
+		t.Fatalf("runDeployJob err: %v", err)
+	}
+	if len(dep.gotServers) != 2 || dep.gotServers[0] != "srv-a" || dep.gotServers[1] != "srv-b" {
+		t.Fatalf("应部署到解析环境的 2 台目标机, got %v", dep.gotServers)
+	}
+}
+
+// TestRunDeployJobNodeServerIdWinsOverResolved 证节点显式 serverId 优先于环境解析目标机
+// (支持一条流水线多台 deploy 节点各发各的机;存量语义不变),且不一致时告警可见。
+func TestRunDeployJobNodeServerIdWinsOverResolved(t *testing.T) {
+	dep := &stubStageDeployer{}
+	b := &Builder{deployer: dep}
+	rep := &fakeReporter{}
+	jb := pipeline.Job{ID: "d", Name: "部署", Type: "deploy_ssh", Config: map[string]any{
+		"serverId": "srv-node",
+	}}
+	r := &run.Run{ID: "run-1", Trigger: run.Trigger{
+		ResolvedEnvironment:     "测试/生产",
+		ResolvedTargetServerIDs: []string{"srv-env"},
+	}}
+	if err := b.runDeployJob(context.Background(), rep, jb, r); err != nil {
+		t.Fatalf("runDeployJob err: %v", err)
+	}
+	if len(dep.gotServers) != 1 || dep.gotServers[0] != "srv-node" {
+		t.Fatalf("节点 serverId 应优先, got %v", dep.gotServers)
+	}
+	// 不一致告警应出现在日志(把「作用范围不一致」从静默变可见)。
+	joined := strings.Join(rep.logs, "\n")
+	if !strings.Contains(joined, "以节点配置为准") {
+		t.Fatalf("不一致时应输出告警, got:\n%s", joined)
+	}
+}
+
+// TestRunDeployJobNodeServerIdMatchingResolvedNoWarn:节点 serverId 与环境解析目标机一致时
+// 不告警(常规路径静默)。
+func TestRunDeployJobNodeServerIdMatchingResolvedNoWarn(t *testing.T) {
+	dep := &stubStageDeployer{}
+	b := &Builder{deployer: dep}
+	rep := &fakeReporter{}
+	jb := pipeline.Job{ID: "d", Name: "部署", Type: "deploy_ssh", Config: map[string]any{
+		"serverId": "srv-same",
+	}}
+	r := &run.Run{ID: "run-1", Trigger: run.Trigger{
+		ResolvedEnvironment:     "测试/生产",
+		ResolvedTargetServerIDs: []string{"srv-same", "srv-other"},
+	}}
+	if err := b.runDeployJob(context.Background(), rep, jb, r); err != nil {
+		t.Fatalf("runDeployJob err: %v", err)
+	}
+	if len(dep.gotServers) != 1 || dep.gotServers[0] != "srv-same" {
+		t.Fatalf("命中环境目标机时只部署节点指定的那台, got %v", dep.gotServers)
+	}
+	if s := strings.Join(rep.logs, "\n"); strings.Contains(s, "以节点配置为准") {
+		t.Fatalf("一致时不应告警, got:\n%s", s)
+	}
+}
+
+// TestRunDeployJobNoTargetFails:节点未指定 serverId 且运行也未解析到环境目标机 → 明确失败,
+// 报错文案指向「分支映射/环境绑定」双来源(不再是单一 serverId 口径)。
+func TestRunDeployJobNoTargetFails(t *testing.T) {
+	b := &Builder{deployer: &stubStageDeployer{}}
+	rep := &fakeReporter{}
+	jb := pipeline.Job{ID: "d", Name: "部署", Type: "deploy_ssh", Config: map[string]any{}}
+	err := b.runDeployJob(context.Background(), rep, jb, &run.Run{ID: "run-1"})
+	if err == nil {
+		t.Fatal("双来源皆空应失败")
+	}
+	if s := strings.Join(rep.logs, "\n"); !strings.Contains(s, "未解析到环境目标机") {
+		t.Fatalf("报错应说明双来源, got:\n%s", s)
+	}
+}
+
 // ─── 阶段内 job 级 DAG 并发执行(横串竖并)─────────────────────────────────────────
 
 // orderDriver 线程安全记录 RunToolchain 的调用顺序(按 image),并可按 image 配退出码 + 阻塞时长。

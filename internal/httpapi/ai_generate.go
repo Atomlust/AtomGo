@@ -61,6 +61,7 @@ type aiBranchMappingDTO struct {
 	ID            string `json:"id"`
 	BranchPattern string `json:"branchPattern"`
 	Environment   string `json:"environment"`
+	EnvironmentID string `json:"environmentId,omitempty"`
 }
 
 type aiProposalDTO struct {
@@ -117,7 +118,7 @@ func toAIProposalDTO(p *ai.Proposal) *aiProposalDTO {
 	}
 	mappings := make([]aiBranchMappingDTO, 0, len(p.BranchMappings))
 	for _, m := range p.BranchMappings {
-		mappings = append(mappings, aiBranchMappingDTO{ID: m.ID, BranchPattern: m.BranchPattern, Environment: m.Environment})
+		mappings = append(mappings, aiBranchMappingDTO{ID: m.ID, BranchPattern: m.BranchPattern, Environment: m.Environment, EnvironmentID: m.EnvironmentID})
 	}
 	return &aiProposalDTO{
 		Stages: stages,
@@ -311,7 +312,14 @@ func makeAIApplyHandler(d aiGenerateDeps) http.HandlerFunc {
 
 		// 3) branchMappingIds → 合入 trigger 分支映射(合并去重)。
 		if len(req.Selections.BranchMappingIDs) > 0 {
-			if err := applySelectedMappings(ctx, d.triggers, id, req.Proposal.BranchMappings, req.Selections.BranchMappingIDs); err != nil {
+			// 根治#:按提案给出的环境名反查项目环境 ID(envByID),使合入的分支映射走环境 ID 引用。
+			envByID := map[string]string{}
+			if st, gerr := d.settings.Get(ctx, id); gerr == nil {
+				for _, e := range st.Environments {
+					envByID[strings.TrimSpace(e.Name)] = strings.TrimSpace(e.ID)
+				}
+			}
+			if err := applySelectedMappings(ctx, d.triggers, id, req.Proposal.BranchMappings, req.Selections.BranchMappingIDs, envByID); err != nil {
 				writeAIApplyError(w, err)
 				return
 			}
@@ -350,6 +358,7 @@ type aiProposalReq struct {
 		ID            string `json:"id"`
 		BranchPattern string `json:"branchPattern"`
 		Environment   string `json:"environment"`
+		EnvironmentID string `json:"environmentId,omitempty"`
 	} `json:"branchMappings"`
 }
 
@@ -489,11 +498,14 @@ func applySelectedBuild(ctx context.Context, svc pipeline.SettingsService, proje
 }
 
 // applySelectedMappings 把勾选的提案分支映射合入既有 trigger 分支映射(去重:同 pattern+env 不重复)。
+// 根治#:合入时按提案给出的环境名反查项目环境 ID 填入 EnvironmentID(best-effort;查不到则留空,
+// 解析时降级用名),使 AI 生成的分支映射同样走环境 ID 引用。
 func applySelectedMappings(ctx context.Context, svc trigger.Service, projectID string, mappings []struct {
 	ID            string `json:"id"`
 	BranchPattern string `json:"branchPattern"`
 	Environment   string `json:"environment"`
-}, mappingIDs []string) error {
+	EnvironmentID string `json:"environmentId,omitempty"`
+}, mappingIDs []string, envByID map[string]string) error {
 	cur, err := svc.Get(ctx, projectID)
 	if err != nil {
 		return err
@@ -521,10 +533,16 @@ func applySelectedMappings(ctx context.Context, svc trigger.Service, projectID s
 			continue
 		}
 		seen[key] = struct{}{}
+		// AI 提案可能直接给环境 ID,也可能只给环境名:优先用 ID,名则反查 envByID。
+		envID := strings.TrimSpace(m.EnvironmentID)
+		if envID == "" && envByID != nil {
+			envID = strings.TrimSpace(envByID[strings.TrimSpace(m.Environment)])
+		}
 		merged = append(merged, trigger.BranchMapping{
 			ID:              "", // 服务端补新 id
 			BranchPattern:   m.BranchPattern,
 			Environment:     m.Environment,
+			EnvironmentID:   envID,
 			TargetServerIDs: []string{},
 		})
 	}

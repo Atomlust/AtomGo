@@ -595,8 +595,9 @@ func (b *Builder) runBuildImageJobIsolated(
 	return b.runBuildImageJob(ctx, sink, rep, jb, stage.Name, proj, settings, r.Trigger.ResolvedEnvironment, ws, commitTag, hasPushJob)
 }
 
-// runDeployJob 执行一个 deploy_ssh 节点:把本 run 已产出的产物经 SSH 部署到节点配置的目标机
+// runDeployJob 执行一个 deploy_ssh 节点:把本 run 已产出的产物经 SSH 部署到目标机
 // (复用 deploy.Service.DeployForStage 中途部署,不动 run 终态)。任一目标失败 → 阶段失败、阻断下游。
+// 目标机来源统一解析:节点 serverId 显式指定优先 → 回退 run 解析出的环境目标机 → 皆空失败(见内联注释)。
 //
 // 环境作用域变量注入:按本 run 解析出的目标环境(Trigger.ResolvedEnvironment)解析「环境与凭据」
 // 卡片的变量(明文 + 保险库 secret 即时解密),经 ctx 透传部署层 —— 文件型产物落目标机部署目录
@@ -609,9 +610,33 @@ func (b *Builder) runDeployJob(ctx context.Context, rep dagrun.StageReporter, jb
 		_ = rep.Log(ctx, streamStdout, "· 部署节点:部署服务未注入,跳过")
 		return nil
 	}
+	// 目标服务器统一解析(C 项收口:服务器来源单一化):
+	//  1. 节点 serverId =「逐节点显式指定」优先级最高(一条流水线多台 deploy 节点可各发各的机,
+	//     也是存量流水线的既有语义);与环境解析目标机不一致时以节点为准但显式告警(不再静默)。
+	//  2. 节点未指定 → 回退本次 run 解析出的环境目标机(Trigger.ResolvedTargetServerIDs,
+	//     webhook/手动经 ResolveMapping 从 Environment.TargetServerIDs 取,即「环境是默认机群」)。
+	//  3. 两者皆空 → 明确失败(原先只看 serverId 的报错升级为双来源说明)。
 	serverID := cfgString(jb.Config, "serverId")
-	if serverID == "" {
-		_ = rep.Log(ctx, streamStderr, fmt.Sprintf("部署节点「%s」未选目标服务器(serverId 空)", jb.Name))
+	var serverIDs []string
+	if serverID != "" {
+		serverIDs = []string{serverID}
+		if resolved := r.Trigger.ResolvedTargetServerIDs; len(resolved) > 0 {
+			pinned := false
+			for _, id := range resolved {
+				if id == serverID {
+					pinned = true
+					break
+				}
+			}
+			if !pinned {
+				_ = rep.Log(ctx, streamStdout, fmt.Sprintf("⚠ 部署节点「%s」显式指定服务器 %s,与解析环境「%s」绑定的目标机 %v 不一致 —— 以节点配置为准(环境目标机仅在该节点未指定时作为默认)", jb.Name, serverID, r.Trigger.ResolvedEnvironment, resolved))
+			}
+		}
+	} else if resolved := r.Trigger.ResolvedTargetServerIDs; len(resolved) > 0 {
+		serverIDs = append(serverIDs, resolved...)
+		_ = rep.Log(ctx, streamStdout, fmt.Sprintf("· 部署节点「%s」未指定目标服务器,使用解析环境「%s」绑定的 %d 台目标机", jb.Name, r.Trigger.ResolvedEnvironment, len(serverIDs)))
+	} else {
+		_ = rep.Log(ctx, streamStderr, fmt.Sprintf("部署节点「%s」未选目标服务器(serverId 空),且本次运行未解析到环境目标机(检查触发分支是否映射到已绑定服务器的环境)", jb.Name))
 		return ErrBuildFailed
 	}
 	cfg := map[string]string{}
@@ -636,7 +661,7 @@ func (b *Builder) runDeployJob(ctx context.Context, rep dagrun.StageReporter, jb
 	if stratLabel == "" {
 		stratLabel = "rolling(默认)"
 	}
-	_ = rep.Log(ctx, streamStdout, fmt.Sprintf("→ SSH 部署本次产物到服务器 %s(策略 %s)…", serverID, stratLabel))
+	_ = rep.Log(ctx, streamStdout, fmt.Sprintf("→ SSH 部署本次产物到服务器 %s(策略 %s)…", strings.Join(serverIDs, ", "), stratLabel))
 	// 把目标机真实执行的命令 + stdout/stderr 实时回流到本部署步骤日志(脱敏由 sink 侧 Masker 兜底)。
 	dctx := deploy.WithCmdLog(ctx, func(stream, text string) { _ = rep.Log(ctx, stream, text) })
 	// 环境作用域变量解析 + 挂载(见函数注释):镜像产物最终以 --env-file 注入容器。
@@ -655,7 +680,7 @@ func (b *Builder) runDeployJob(ctx context.Context, rep dagrun.StageReporter, jb
 		}
 	}
 	run.RecordExecution(rep, run.ExecutionReal)
-	results, err := b.deployer.DeployForStage(dctx, r.ID, []string{serverID}, cfg, strategy)
+	results, err := b.deployer.DeployForStage(dctx, r.ID, serverIDs, cfg, strategy)
 	if err != nil {
 		_ = rep.Log(ctx, streamStderr, "部署失败:"+err.Error())
 		return ErrBuildFailed
@@ -815,7 +840,12 @@ func (b *Builder) runBuildImageJob(ctx context.Context, sink run.StepSink, rep d
 				art.Metadata["digest"] = digest
 			}
 		case hasPushJob:
-			_ = rep.Log(ctx, streamStdout, "配了 push_image 但环境未绑定镜像仓库(registry),镜像留本地;到「流水线配置 → 环境与凭据」给该环境绑定仓库后即自动推送(分支映射的环境名需与环境定义完全一致)")
+			// 两种根因必须区分,旧提示把二者混为一谈(把"分支没映射→环境为空"误说成"未绑仓库")。
+			if strings.TrimSpace(envName) == "" {
+				_ = rep.Log(ctx, streamStdout, "配了 push_image,但本次运行未解析到环境(触发分支未匹配任何分支映射),镜像留在构建机本地、不会推送;后续的远程部署节点将因拉不到该镜像而失败。修复:在「触发 → 分支映射」把该分支映射到已绑定镜像仓库的环境")
+			} else {
+				_ = rep.Log(ctx, streamStdout, "配了 push_image,但环境「"+envName+"」未绑定镜像仓库(registry),镜像留本地;到「流水线配置 → 环境与凭据」给该环境绑定仓库后即自动推送")
+			}
 		}
 	}
 

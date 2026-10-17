@@ -30,6 +30,11 @@ export interface BranchMapping {
   branchPattern: string
   environment: string
   /**
+   * 环境 ID 引用(根治#):优先于 environment(名)定位环境,环境改名也不断裂。
+   * 缺失(存量 / 旧前端)→ 后端降级用 environment 名。
+   */
+  environmentId?: string
+  /**
    * TODO (Story 4-1): Once target_servers table exists, validate ids here.
    * For now, the list is accepted as-is without existence checking.
    */
@@ -58,6 +63,7 @@ export interface SaveTriggerInput {
   branchMappings: Array<{
     branchPattern: string
     environment: string
+    environmentId?: string
     targetServerIds: string[]
   }>
   unmatchedPolicy: UnmatchedPolicy

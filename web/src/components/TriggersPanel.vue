@@ -68,6 +68,7 @@ interface MappingRow {
   id?: string
   branchPattern: string
   environment: string
+  environmentId: string
   targetServerIds: string[]
   patternError: string
 }
@@ -86,15 +87,18 @@ const servers = ref<Server[]>([])
 /** 环境数据加载失败(非阻断:其它触发器设置仍可保存,仅环境下拉不可用)。 */
 const envDataError = ref('')
 
-function envByName(name: string): Environment | undefined {
-  const n = name.trim()
-  if (!n) return undefined
-  return environments.value.find((e) => e.name === n)
+/** 按环境 ID 或名称(trim 后)定位环境;环境 ID 优先,名称兜底(兼容存量 / 失效环境名)。 */
+function envByKey(key: string): Environment | undefined {
+  const k = key.trim()
+  if (!k) return undefined
+  return (
+    environments.value.find((e) => (e.id ?? '').trim() === k) ??
+    environments.value.find((e) => e.name.trim() === k)
+  )
 }
 
-/** 环境绑定的目标服务器 id;环境不存在(旧数据/已删环境)→ 空。 */
-function serversForEnv(name: string): string[] {
-  const env = envByName(name)
+/** 环境绑定的目标服务器 id;环境不存在(旧数据 / 已删环境)→ 空。 */
+function serversForEnv(env: Environment | undefined): string[] {
   return env ? [...(env.targetServerIds ?? [])] : []
 }
 
@@ -102,31 +106,49 @@ function serverName(id: string): string {
   return servers.value.find((s) => s.id === id)?.name ?? id
 }
 
-/** 行展示用的目标服务器名列表:环境存在 → 继承其绑定;否则回退映射里的旧快照。 */
+/** 行展示用的目标服务器名列表:优先按环境 ID 解析,名称兜底;解析不到则回退映射里的旧快照。 */
 function inheritedServerNames(row: MappingRow): string {
-  const ids = envByName(row.environment) ? serversForEnv(row.environment) : row.targetServerIds
+  const env = envByKey(row.environmentId) ?? envByKey(row.environment)
+  const ids = env ? serversForEnv(env) : row.targetServerIds
   return ids.length ? ids.map(serverName).join('、') : ''
 }
 
-/** 环境下拉选项:已知环境 + 当前值(已失效环境也保留,避免静默丢失旧数据)。 */
-function envOptions(row: MappingRow): Array<{ name: string; label: string }> {
-  const opts = environments.value.map((e) => ({ name: e.name, label: e.name }))
-  const cur = row.environment.trim()
-  if (cur && !environments.value.some((e) => e.name === cur)) {
-    opts.unshift({ name: cur, label: `${cur} ${t('projectPanels.triggers.envStaleSuffix')}` })
+/** 环境下拉选项:已知环境(id 为值)+ 当前已失效环境(保留旧名,避免静默丢失)。 */
+function envOptions(row: MappingRow): Array<{ id: string; name: string; label: string }> {
+  const opts = environments.value.map((e) => ({ id: e.id ?? '', name: e.name, label: e.name }))
+  const curId = row.environmentId.trim()
+  const curName = row.environment.trim()
+  const resolved = envByKey(curId) ?? (curName ? envByKey(curName) : undefined)
+  if (!resolved && (curId || curName)) {
+    opts.unshift({ id: '', name: curName, label: `${curName} ${t('projectPanels.triggers.envStaleSuffix')}` })
   }
   return opts
 }
 
-function onEnvChange(row: MappingRow): void {
-  // 环境切换 → 目标服务器快照同步为所选环境的绑定。
-  if (envByName(row.environment)) row.targetServerIds = serversForEnv(row.environment)
+function isEnvStale(row: MappingRow): boolean {
+  if (!row.environmentId && !row.environment) return false
+  return !envByKey(row.environmentId) && !envByKey(row.environment)
 }
 
-/** 环境数据到位后,把已识别环境的行快照刷新为最新绑定(旧/失效环境不动)。 */
+function onEnvChange(row: MappingRow): void {
+  // 环境切换(ID 驱动)→ 同步名 + 目标服务器快照为所选环境的绑定。
+  const env = envByKey(row.environmentId)
+  if (env) {
+    row.environment = env.name
+    row.targetServerIds = serversForEnv(env)
+  } else {
+    row.targetServerIds = []
+  }
+}
+
+/** 环境数据到位后:刷新已识别环境行的服务器快照,并尽量把存量名映射回填为环境 ID。 */
 function syncInheritedServers(): void {
   for (const row of mappings.value) {
-    if (envByName(row.environment)) row.targetServerIds = serversForEnv(row.environment)
+    const env = envByKey(row.environmentId) ?? envByKey(row.environment)
+    if (env) {
+      row.targetServerIds = serversForEnv(env)
+      if (!row.environmentId) row.environmentId = env.id ?? ''
+    }
   }
 }
 
@@ -285,7 +307,7 @@ function validatePattern(pattern: string): string {
 }
 
 function addRow(): void {
-  insertMappingRow({ _key: ++_keySeq, branchPattern: '', environment: '', targetServerIds: [], patternError: '' })
+  insertMappingRow({ _key: ++_keySeq, branchPattern: '', environment: '', environmentId: '', targetServerIds: [], patternError: '' })
 }
 
 /**
@@ -307,7 +329,8 @@ function addDefaultMapping(): void {
     _key: ++_keySeq,
     branchPattern: 'main',
     environment: env.name,
-    targetServerIds: serversForEnv(env.name),
+    environmentId: env.id ?? '',
+    targetServerIds: serversForEnv(env),
     patternError: '',
   })
 }
@@ -375,6 +398,7 @@ async function persist(scope: SaveScope): Promise<void> {
       branchMappings: mappings.value.map((r) => ({
         branchPattern: r.branchPattern.trim(),
         environment:   r.environment.trim(),
+        environmentId: r.environmentId.trim(),
         targetServerIds: r.targetServerIds,
       })),
       unmatchedPolicy: unmatchedPolicy.value,
@@ -421,6 +445,7 @@ function applyConfig(config: TriggerConfig): void {
     id: m.id,
     branchPattern: m.branchPattern,
     environment: m.environment,
+    environmentId: m.environmentId ?? '',
     targetServerIds: m.targetServerIds,
     patternError: '',
   }))
@@ -667,15 +692,15 @@ const displayWebhookUrl = computed(() => {
           </div>
           <div class="map-cell">
             <select
-              v-model="row.environment"
+              v-model="row.environmentId"
               class="map-input map-select"
-              :class="{ 'map-select--stale': !!row.environment && !envByName(row.environment) }"
+              :class="{ 'map-select--stale': isEnvStale(row) }"
               :disabled="!!envDataError"
               :aria-label="t('projectPanels.triggers.envNameAria', { key: row._key })"
               @change="onEnvChange(row)"
             >
               <option value="">{{ t('projectPanels.triggers.envSelectPlaceholder') }}</option>
-              <option v-for="opt in envOptions(row)" :key="opt.name" :value="opt.name">{{ opt.label }}</option>
+              <option v-for="opt in envOptions(row)" :key="opt.id || opt.name" :value="opt.id">{{ opt.label }}</option>
             </select>
           </div>
           <div class="map-cell map-cell--servers">

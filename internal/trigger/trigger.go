@@ -24,6 +24,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/atomlust/atomgo/internal/pipeline"
 	"github.com/atomlust/atomgo/internal/store"
 	"github.com/atomlust/atomgo/internal/vault"
 	"github.com/google/uuid"
@@ -57,6 +58,9 @@ var (
 	ErrInvalidPolicy = errors.New("trigger: invalid unmatched policy")
 	// ErrInvalidPathFilter 表示路径过滤 glob 非空校验失败(去空白后为空)。
 	ErrInvalidPathFilter = errors.New("trigger: invalid path filter")
+	// ErrEnvironmentNotFound 表示分支映射引用的 EnvironmentID 指向一个不存在的环境
+	// (根治#:保存时即拦截悬空引用,避免运行时静默错配)。
+	ErrEnvironmentNotFound = errors.New("trigger: referenced environment not found")
 )
 
 // Events 是触发事件开关(手动触发常开,不建模为字段)。
@@ -70,13 +74,20 @@ type Events struct {
 	Release     bool `json:"release"`
 }
 
-// BranchMapping 是一条分支映射:分支(通配)模式 → 环境名 + 目标服务器引用 id 列表。
-// 本期 Environment 为文本名(2-4 落地后可升级为环境引用);TargetServerIDs 为占位
-// 引用列表(目标服务器表尚不存在,4-1 后做存在性校验)。
+// BranchMapping 是一条分支映射:分支(通配)模式 → 环境 + 目标服务器引用 id 列表。
+//
+// 根治(#):环境改用**环境 ID(EnvironmentID)** 引用,而非脆弱的文本名——环境改名也不会
+// 再静默错配(曾导致「配了 registry 却不推送 / 部署不自动登录」)。Environment 字段保留为
+// 环境名的冗余快照 / 降级来源(存量数据无 EnvironmentID 时按名定位)。
+//
+// TargetServerIDs 自根治起**不再作为生效来源**:部署目标服务器统一来自被引用环境的
+// Environment.TargetServerIDs(唯一真相源)。本字段仅在「环境找不到」的极端兜底时才被使用,
+// 正常保存路径下前端不再维护它(选择环境时从环境继承)。
 type BranchMapping struct {
 	ID              string   `json:"id"`
 	BranchPattern   string   `json:"branchPattern"`
 	Environment     string   `json:"environment"`
+	EnvironmentID   string   `json:"environmentId,omitempty"`
 	TargetServerIDs []string `json:"targetServerIds"`
 }
 
@@ -133,8 +144,18 @@ type Service interface {
 
 // service 是 store + vault 支撑的 Service 实现。
 type service struct {
-	db    *sql.DB
-	vault vault.Vault
+	db       *sql.DB
+	vault    vault.Vault
+	settings pipeline.SettingsService
+}
+
+// Option 是 Service 的可选装配项(不破坏 New(db, v) 既有签名)。
+type Option func(*service)
+
+// WithSettings 注入构建/部署配置服务,用于保存时校验分支映射的 EnvironmentID 指向有效环境
+// (根治#:拦截悬空引用)。未注入(settings=nil)时跳过该校验(向后兼容 / 测试)。
+func WithSettings(svc pipeline.SettingsService) Option {
+	return func(s *service) { s.settings = svc }
 }
 
 // New 构造 Service。
@@ -143,8 +164,12 @@ type service struct {
 //     v 为 nil 或未配置 master key 时,涉及密钥的读取/重置返回 ErrVaultUnconfigured。
 //
 // 不在此做任何重活(无 init() 副作用,避免抬高空载内存)。
-func New(db *sql.DB, v vault.Vault) Service {
-	return &service{db: db, vault: v}
+func New(db *sql.DB, v vault.Vault, opts ...Option) Service {
+	s := &service{db: db, vault: v}
+	for _, o := range opts {
+		o(s)
+	}
+	return s
 }
 
 func (s *service) Get(ctx context.Context, projectID string) (*Config, error) {
@@ -164,6 +189,14 @@ func (s *service) Save(ctx context.Context, projectID string, in SaveInput) (*Co
 	// 确保配置已存在(惰性默认);Get 也完成项目存在性校验。
 	if _, err := s.Get(ctx, projectID); err != nil {
 		return nil, err
+	}
+
+	// 根治#:若注入了 settings,校验分支映射引用的 EnvironmentID 指向有效环境。
+	// 存量数据无 EnvironmentID(空)→ 跳过(降级用名)。settings 未注入 → 跳过(向后兼容)。
+	if s.settings != nil {
+		if err := s.validateMappingEnvironments(ctx, projectID, in.BranchMappings); err != nil {
+			return nil, err
+		}
 	}
 
 	policy, err := normalizePolicy(in.UnmatchedPolicy)
@@ -512,10 +545,46 @@ func normalizeMappings(in []BranchMapping) ([]BranchMapping, error) {
 			ID:              id,
 			BranchPattern:   pattern,
 			Environment:     strings.TrimSpace(m.Environment),
+			EnvironmentID:   strings.TrimSpace(m.EnvironmentID),
 			TargetServerIDs: ids,
 		})
 	}
 	return out, nil
+}
+
+// validateMappingEnvironments 校验每条分支映射的 EnvironmentID(若存在)指向项目内真实存在的
+// 环境(根治#:保存期即拦截悬空引用,避免运行时静默错配)。EnvironmentID 空(存量数据 / 旧前端)
+// → 跳过(降级用名)。环境配置行不存在(sql.ErrNoRows,即项目尚未定义任何环境)→ 任何非空
+// EnvironmentID 都视为无效,同样拦截。
+func (s *service) validateMappingEnvironments(ctx context.Context, projectID string, mappings []BranchMapping) error {
+	st, err := pipeline.LoadExistingSettings(ctx, s.db, projectID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			// 无构建/部署配置行:项目尚未定义任何环境 → 任何非空 EnvironmentID 都无效。
+			for _, m := range mappings {
+				if strings.TrimSpace(m.EnvironmentID) != "" {
+					return fmt.Errorf("%w: %s", ErrEnvironmentNotFound, strings.TrimSpace(m.EnvironmentID))
+				}
+			}
+			return nil
+		}
+		// 其它读取错误:不阻断保存(诚实降级,不把配置保存变成 500)。
+		return nil
+	}
+	ids := make(map[string]struct{}, len(st.Environments))
+	for _, e := range st.Environments {
+		ids[strings.TrimSpace(e.ID)] = struct{}{}
+	}
+	for _, m := range mappings {
+		id := strings.TrimSpace(m.EnvironmentID)
+		if id == "" {
+			continue
+		}
+		if _, ok := ids[id]; !ok {
+			return fmt.Errorf("%w: %s", ErrEnvironmentNotFound, id)
+		}
+	}
+	return nil
 }
 
 // normalizePathFilters 校验并规范化路径过滤 glob 列表(monorepo · P0):

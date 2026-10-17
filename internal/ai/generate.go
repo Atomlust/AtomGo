@@ -76,10 +76,14 @@ type ProposalBuild struct {
 }
 
 // ProposalBranchMapping 对齐 trigger.BranchMapping 子集。
+//
+// EnvironmentID 是根治#后分支映射对环境的新引用方式(优先于 Environment 名)。AI 提案若按环境名
+// 给出,apply 时会按名反查项目环境的 ID 填充(见 httpapi.applySelectedMappings)。
 type ProposalBranchMapping struct {
 	ID            string `json:"id"`
 	BranchPattern string `json:"branchPattern"`
 	Environment   string `json:"environment"`
+	EnvironmentID string `json:"environmentId,omitempty"`
 }
 
 // Proposal 是 LLM 生成的结构化流水线提案(供前端逐项勾选后 apply)。

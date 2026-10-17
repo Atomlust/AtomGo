@@ -114,19 +114,22 @@ type Delivery struct {
 // Receiver 处理 Gitee webhook 投递:定位项目 → 解密密钥验签 → 解析/匹配 → 去重 → 创建运行。
 // 它复用 trigger 包内部的密钥解密(经 vault.OpenSecret),不经任何对外暴露明文的接口。
 type Receiver struct {
-	db     *sql.DB
-	vault  vault.Vault
-	runner RunCreator
+	db          *sql.DB
+	vault       vault.Vault
+	runner      RunCreator
+	envResolver *EnvironmentResolver
 }
 
 // NewReceiver 构造 webhook 接收器。
 //   - db:经参数化 SQL 触库(读触发配置 + 去重表)。
 //   - v:复用 vault secretbox 解密 webhook 签名密钥;未配置 → 验签不可用(明确拒绝,不 panic)。
 //   - runner:命中后创建运行(run.Service 适配)。
+//   - envResolver:分支映射→环境解析(根治#:按环境 ID 解析环境名 + 从环境取目标服务器);
+//     内部复用 db,无需外部注入。
 //
 // 不在此做任何重活(无 init() 副作用)。
 func NewReceiver(db *sql.DB, v vault.Vault, runner RunCreator) *Receiver {
-	return &Receiver{db: db, vault: v, runner: runner}
+	return &Receiver{db: db, vault: v, runner: runner, envResolver: NewEnvironmentResolver(db)}
 }
 
 // Handle 处理一次投递,返回处理结果或错误。
@@ -209,12 +212,15 @@ func (rc *Receiver) Handle(ctx context.Context, d Delivery) (*Result, error) {
 		return &Result{Accepted: false, Ignored: IgnoredPathNoMatch}, nil
 	}
 
+	// 根治#:解析环境与目标服务器——优先按映射的 EnvironmentID 定位环境(改名安全),
+	// 目标服务器强制取自被引用环境的 Environment.TargetServerIDs(唯一真相源)。
+	resolvedEnv, resolvedServers := rc.envResolver.ResolveMapping(ctx, cfg.ProjectID, mapping)
 	runID, err := rc.runner.CreateWebhookRun(ctx, cfg.ProjectID, RunRequest{
 		Branch:                  parsed.Branch,
 		Commit:                  parsed.Commit,
 		Actor:                   actorFor(d.Provider),
-		ResolvedEnvironment:     mapping.Environment,
-		ResolvedTargetServerIDs: mapping.TargetServerIDs,
+		ResolvedEnvironment:     resolvedEnv,
+		ResolvedTargetServerIDs: resolvedServers,
 	})
 	if err != nil {
 		// 创建失败:回滚去重占位,允许重试。回滚 DELETE 的错误不吞,合并进返回错误

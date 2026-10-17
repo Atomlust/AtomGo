@@ -36,6 +36,7 @@ type branchMappingDTO struct {
 	ID              string   `json:"id"`
 	BranchPattern   string   `json:"branchPattern"`
 	Environment     string   `json:"environment"`
+	EnvironmentID   string   `json:"environmentId,omitempty"`
 	TargetServerIDs []string `json:"targetServerIds"`
 }
 
@@ -51,6 +52,7 @@ func toTriggerDTO(c *trigger.Config) triggerDTO {
 			ID:              m.ID,
 			BranchPattern:   m.BranchPattern,
 			Environment:     m.Environment,
+			EnvironmentID:   m.EnvironmentID,
 			TargetServerIDs: ids,
 		})
 	}
@@ -90,6 +92,8 @@ func writeTriggerError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusUnprocessableEntity, "invalid_unmatched_policy", "未匹配策略只能为 record 或 ignore")
 	case errors.Is(err, trigger.ErrInvalidPathFilter):
 		writeError(w, http.StatusUnprocessableEntity, "invalid_path_filter", "路径过滤 glob 不能含空白(如 backend/**、*.go)")
+	case errors.Is(err, trigger.ErrEnvironmentNotFound):
+		writeError(w, http.StatusUnprocessableEntity, "environment_not_found", "分支映射引用的环境不存在(可能已被删除或 ID 无效)")
 	default:
 		writeError(w, http.StatusInternalServerError, "internal", "服务器内部错误")
 	}
@@ -134,6 +138,7 @@ func makeSaveTriggerHandler(svc trigger.Service) http.HandlerFunc {
 				ID              string   `json:"id"`
 				BranchPattern   string   `json:"branchPattern"`
 				Environment     string   `json:"environment"`
+				EnvironmentID   string   `json:"environmentId"`
 				TargetServerIDs []string `json:"targetServerIds"`
 			} `json:"branchMappings"`
 			UnmatchedPolicy string   `json:"unmatchedPolicy"`
@@ -150,6 +155,7 @@ func makeSaveTriggerHandler(svc trigger.Service) http.HandlerFunc {
 				ID:              m.ID,
 				BranchPattern:   m.BranchPattern,
 				Environment:     m.Environment,
+				EnvironmentID:   m.EnvironmentID,
 				TargetServerIDs: m.TargetServerIDs,
 			})
 		}
