@@ -119,7 +119,7 @@ export default {
   envDeployParamsHint: 'Geltungsbereich: gilt einheitlich für alle Zielserver dieser Umgebung und überschreibt die Standard-Containername/-Ports des deploy_ssh-Knotens. Werden mehrere Umgebungen auf demselben Server ausgebracht, vergeben Sie jeweils einen anderen Containername und Host-Port – sonst überschreibt die Promotion gleichnamige Container und kollidiert bei Host-Ports.',
   envDeployParamsEmptyHint: 'Leer-Rückfall: Die Promotions-Bereitstellung leitet den Containername aus dem Artefaktnamen ab (über Umgebungen gleich, auf einem Host konfliktanfällig) und veröffentlicht keinen Host-Port (Container extern nicht erreichbar). Bei Mehr-Umgebungs-/Gleicher-Server-Bereitstellungen unbedingt ausfüllen.',
   envContainerName: 'Containername',
-  envContainerNamePlaceholder: 'atomupdate-web',
+  envContainerNamePlaceholder: 'atomgo-web',
   envPorts: 'Port-Mappings',
   envPortsPlaceholder: '8001:8080',
   envRunArgs: 'Run-Args',

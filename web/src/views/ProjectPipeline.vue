@@ -745,6 +745,7 @@ async function togglePrStatus(next: boolean): Promise<void> {
             :credentials="credentials"
             :servers="servers"
             :users="users"
+            :project-name="project?.name ?? ''"
             :disabled="saveSubmitting"
             @update="handleEnvsUpdate"
           />

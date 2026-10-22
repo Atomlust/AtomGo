@@ -38,7 +38,7 @@ export default {
   typeGitToken: 'Jeton Git',
   typeGitHttp: 'Git HTTPS',
   typeSshKey: 'Clé SSH',
-  typeSshPassword: 'Mot de passe SSH',
+  typeSshPassword: 'Mot de passe',
   typeRegistry: 'Registre',
 
   maskTitle: 'Valeur masquée (affichable dans Modifier)',
@@ -80,10 +80,10 @@ export default {
   secretOptionalEdit: '(laisser vide pour ne pas faire pivoter)',
   secretPlaceholderSshKey: 'Collez la clé privée complète (avec les lignes -----BEGIN/END-----)…',
   secretPlaceholderKeep: 'Laisser vide pour conserver le secret actuel',
-  secretPlaceholderSshPassword: 'Saisissez le mot de passe de connexion SSH…',
+  secretPlaceholderSshPassword: 'Saisissez le mot de passe…',
   secretPlaceholderToken: 'Collez le contenu du jeton…',
   secretPlaceholderGitHttp: 'Saisissez le mot de passe ou le jeton Git HTTPS…',
-  hintSshPassword: 'Le nom d’utilisateur de connexion SSH se renseigne lors de « l’enregistrement du serveur » ; seul le mot de passe est stocké ici. Il ne peut pas être relu après enregistrement ; seul le masque est affiché.',
+  hintSshPassword: 'Le mot de passe est stocké une seule fois ; après l’enregistrement il ne peut pas être relu, seuls le masque est affiché. Utilisable pour les mots de passe de base de données, les clés API, etc.',
   hintSecret: 'Le secret ne peut pas être relu après son enregistrement ; l’interface n’affiche que la valeur masquée',
   hintGitHttp: 'Pour la connexion Git HTTPS : utilisez le mot de passe du compte ou un Personal Access Token. Seul le masque est affiché après l’enregistrement.',
 

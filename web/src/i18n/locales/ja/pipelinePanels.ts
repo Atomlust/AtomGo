@@ -119,7 +119,7 @@ export default {
   envDeployParamsHint: '適用範囲：この環境のすべての対象サーバーに統一して適用され、deploy_ssh ノードの既定のコンテナ名／ポートを上書きします。同一サーバーに複数環境をデプロイする場合は、環境ごとに異なるコンテナ名とホストポートを設定してください。同じ名前だと昇格時にコンテナが上書きされ、ホストポートが衝突します。',
   envDeployParamsEmptyHint: '空の場合の動作：昇格デプロイはコンテナ名を成果物名から自動生成します（環境間で同一のため同ホストで衝突しやすい）、かつホストポートを公開しません（外部から到達不可）。複数環境／同一サーバー構成では必ず入力してください。',
   envContainerName: 'コンテナ名',
-  envContainerNamePlaceholder: 'atomupdate-web',
+  envContainerNamePlaceholder: 'atomgo-web',
   envPorts: 'ポートマッピング',
   envPortsPlaceholder: '8001:8080',
   envRunArgs: 'run 引数',

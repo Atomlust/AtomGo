@@ -119,7 +119,7 @@ export default {
   envDeployParamsHint: 'Portée : appliqué de façon uniforme à tous les serveurs cibles de cet environnement, remplaçant le nom de conteneur / ports par défaut du nœud deploy_ssh. Lors du déploiement de plusieurs environnements sur le même serveur, donnez à chacun un nom de conteneur et un port hôte différents, sinon la promotion écrasera les conteneurs de même nom et entrera en conflit sur les ports hôte.',
   envDeployParamsEmptyHint: 'Repli si vide : le déploiement par promotion déduit le nom du conteneur du nom de l artefact (identique selon les environnements, sujet aux conflits sur le même hôte) et ne publie aucun port hôte (conteneur inaccessible de l extérieur). À renseigner pour les déploiements multi-environnements / même serveur.',
   envContainerName: 'Nom de conteneur',
-  envContainerNamePlaceholder: 'atomupdate-web',
+  envContainerNamePlaceholder: 'atomgo-web',
   envPorts: 'Mappings de ports',
   envPortsPlaceholder: '8001:8080',
   envRunArgs: 'Run args',

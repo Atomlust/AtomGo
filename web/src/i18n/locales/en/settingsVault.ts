@@ -38,7 +38,7 @@ export default {
   typeGitToken: 'Git token',
   typeGitHttp: 'Git HTTPS',
   typeSshKey: 'SSH key',
-  typeSshPassword: 'SSH password',
+  typeSshPassword: 'Password',
   typeRegistry: 'Registry',
 
   maskTitle: 'Masked value (reveal it in Edit)',
@@ -80,10 +80,10 @@ export default {
   secretOptionalEdit: '(leave blank to keep current)',
   secretPlaceholderSshKey: 'Paste the full private key (including -----BEGIN/END----- lines)…',
   secretPlaceholderKeep: 'Leave blank to keep the current secret',
-  secretPlaceholderSshPassword: 'Enter the SSH login password…',
+  secretPlaceholderSshPassword: 'Enter the password…',
   secretPlaceholderToken: 'Paste the token…',
   secretPlaceholderGitHttp: 'Enter the Git HTTPS password or token…',
-  hintSshPassword: 'The SSH login username is set when you register the server; only the password is stored here. It cannot be read back after saving — only the mask is shown.',
+  hintSshPassword: 'The password is stored once; after saving it cannot be read back, only the mask is shown. Use it for database passwords, API keys, etc.',
   hintSecret: 'The secret cannot be read back after it is saved; the UI only shows the masked value.',
   hintGitHttp: 'Used for Git HTTPS login: enter an account password or a Personal Access Token. Only the mask is shown after saving.',
 

@@ -31,6 +31,8 @@ interface Props {
   /** 用户列表(设置 · 用户管理),供「审批人」多选;审批人按用户名(身份)匹配。 */
   users: User[]
   disabled?: boolean
+  /** 当前项目名(用于容器名占位提示;为空则用默认文案 atomgo-web)。 */
+  projectName?: string
 }
 const props = defineProps<Props>()
 
@@ -108,6 +110,11 @@ const REGISTRY_TYPES = computed<Array<{ key: RegistryType; label: string }>>(() 
   { key: 'dockerhub', label: 'Docker Hub' },
   { key: 'custom', label: t('pipelinePanels.envRegistryCustom') },
 ])
+
+// 容器名占位:优先用项目名(更贴近实际部署),取不到时回退到默认文案 atomgo-web。
+const containerNamePlaceholder = computed(() =>
+  (props.projectName ?? '').trim() || t('pipelinePanels.envContainerNamePlaceholder'),
+)
 const vaultOptions = computed(() => props.credentials.map((c) => ({ value: c.id, label: `${c.name} · ${c.maskedValue}` })))
 // 目标服务器:从「设置 · 服务器」列表多选(按 id 引用)。
 const serverOptions = computed(() =>
@@ -520,7 +527,7 @@ function maskFor(row: VarRow): string {
                   v-model="env.containerName"
                   class="ev-v mono"
                   type="text"
-                  :placeholder="t('pipelinePanels.envContainerNamePlaceholder')"
+                  :placeholder="containerNamePlaceholder"
                   :aria-label="t('pipelinePanels.envContainerName')"
                   :disabled="disabled"
                 >

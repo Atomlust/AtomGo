@@ -38,7 +38,7 @@ export default {
   typeGitToken: 'Git 토큰',
   typeGitHttp: 'Git HTTPS',
   typeSshKey: 'SSH 키',
-  typeSshPassword: 'SSH 비밀번호',
+  typeSshPassword: '비밀번호',
   typeRegistry: '레지스트리',
 
   maskTitle: '마스킹 값(편집에서 평문 보기 가능)',
@@ -80,10 +80,10 @@ export default {
   secretOptionalEdit: '(비워 두면 교체하지 않음)',
   secretPlaceholderSshKey: '전체 개인 키(-----BEGIN/END----- 줄 포함)를 붙여넣으세요…',
   secretPlaceholderKeep: '비워 두면 현재 시크릿을 유지합니다',
-  secretPlaceholderSshPassword: 'SSH 로그인 비밀번호를 입력하세요…',
+  secretPlaceholderSshPassword: '비밀번호를 입력하세요…',
   secretPlaceholderToken: '토큰 내용을 붙여넣으세요…',
   secretPlaceholderGitHttp: 'Git HTTPS 비밀번호 또는 토큰 입력…',
-  hintSshPassword: 'SSH 로그인 사용자 이름은 「서버 등록」 시 입력합니다. 여기에는 비밀번호만 저장됩니다. 기록 후에는 읽을 수 없으며 마스킹만 표시됩니다.',
+  hintSshPassword: '비밀번호는 한 번만 저장되며, 저장 후에는 읽을 수 없고 마스킹만 표시됩니다. 데이터베이스 비밀번호, API 키 등에 사용하세요.',
   hintSecret: '시크릿은 기록 후 다시 읽을 수 없으며, 화면에는 마스킹 값만 표시됩니다',
   hintGitHttp: 'Git HTTPS 로그인에 사용됩니다. 계정 비밀번호 또는 Personal Access Token을 입력하세요. 저장 후에는 마스크만 표시됩니다.',
 

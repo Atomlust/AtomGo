@@ -27,7 +27,7 @@ const (
 	TypeGitHTTP     = "git_http" // Git HTTPS 用户名 + 密码或 Token
 	TypeSSHKey      = "ssh_key"
 	TypeRegistry    = "registry"
-	TypeSSHPassword = "ssh_password" // SSH 登录密码(非 PEM);SSH 层据 looksLikePEM 自动按密码认证
+	TypeSSHPassword = "ssh_password" // 通用密码(非 PEM):数据库密码/API 密钥等均用此类型,仅存密文;SSH 层据 looksLikePEM 自动按密码认证
 	TypeDNSToken    = "dns_token"    // DNS 提供商 API 凭据(单字串:Cloudflare token / 「ID,Secret」);掩码走 default 全打点
 )
 

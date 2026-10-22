@@ -119,7 +119,7 @@ export default {
   envDeployParamsHint: '作用范围：对本环境的所有目标服务器统一生效,覆盖流水线 deploy_ssh 节点的默认容器名 / 端口。同一台服务器部署多个环境时,请为每个环境设置不同的容器名与宿主机端口,否则晋级时容器名相同会互相覆盖、宿主机端口会冲突。',
   envDeployParamsEmptyHint: '留空回退：晋级部署将用产物名自动生成容器名(各环境相同,同机易冲突),且不发布任何宿主机端口(容器对外不可达)。多环境 / 同机部署请务必填写。',
   envContainerName: '容器名',
-  envContainerNamePlaceholder: 'atomupdate-web',
+  envContainerNamePlaceholder: 'atomgo-web',
   envPorts: '端口映射',
   envPortsPlaceholder: '8001:8080',
   envRunArgs: '运行参数',

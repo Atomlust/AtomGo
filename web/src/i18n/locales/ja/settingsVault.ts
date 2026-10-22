@@ -38,7 +38,7 @@ export default {
   typeGitToken: 'Git トークン',
   typeGitHttp: 'Git HTTPS',
   typeSshKey: 'SSH キー',
-  typeSshPassword: 'SSH パスワード',
+  typeSshPassword: 'パスワード',
   typeRegistry: 'レジストリ',
 
   maskTitle: 'マスク値（編集画面で平文を表示できます）',
@@ -80,10 +80,10 @@ export default {
   secretOptionalEdit: '（空欄ならローテーションしません）',
   secretPlaceholderSshKey: '完全な秘密鍵（-----BEGIN/END----- 行を含む）を貼り付け…',
   secretPlaceholderKeep: '空欄にすると現在のシークレットを保持します',
-  secretPlaceholderSshPassword: 'SSH ログインパスワードを入力…',
+  secretPlaceholderSshPassword: 'パスワードを入力…',
   secretPlaceholderToken: 'トークンの内容を貼り付け…',
   secretPlaceholderGitHttp: 'Git HTTPS のパスワードまたはトークンを入力…',
-  hintSshPassword: 'SSH ログインのユーザー名は「サーバー登録」時に入力します。ここにはパスワードのみを保存します。保存後は読み出せず、マスクのみが表示されます。',
+  hintSshPassword: 'パスワードはここに 1 回だけ保存され、保存後は読み出せずマスクのみ表示されます。データベースのパスワードや API キーなどに利用できます。',
   hintSecret: 'シークレットは保存後に読み出せません。画面にはマスク値のみが表示されます',
   hintGitHttp: 'Git HTTPS ログイン用です。アカウントのパスワードまたは Personal Access Token を入力してください。保存後はマスクのみ表示されます。',
 

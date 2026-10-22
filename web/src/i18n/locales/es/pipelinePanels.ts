@@ -119,7 +119,7 @@ export default {
   envDeployParamsHint: 'Alcance: se aplica de forma uniforme a todos los servidores de destino de este entorno y anula el nombre de contenedor/puertos predeterminados del nodo deploy_ssh. Al desplegar varios entornos en el mismo servidor, asigne a cada uno un nombre de contenedor y puerto de host distintos; de lo contrario, la promoción sobrescribirá contenedores con el mismo nombre y colisionará en los puertos de host.',
   envDeployParamsEmptyHint: 'Respaldo si está vacío: el despliegue por promoción deriva el nombre del contenedor del nombre del artefacto (igual en todos los entornos, propenso a conflictos en el mismo host) y no publica ningún puerto de host (contenedor inaccesible externamente). Rellene esto en despliegues multi-entorno / mismo servidor.',
   envContainerName: 'Nombre de contenedor',
-  envContainerNamePlaceholder: 'atomupdate-web',
+  envContainerNamePlaceholder: 'atomgo-web',
   envPorts: 'Mapeos de puertos',
   envPortsPlaceholder: '8001:8080',
   envRunArgs: 'Run args',

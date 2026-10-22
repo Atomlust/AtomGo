@@ -38,7 +38,7 @@ export default {
   typeGitToken: 'Git 令牌',
   typeGitHttp: 'Git HTTPS',
   typeSshKey: 'SSH 私钥',
-  typeSshPassword: 'SSH 密码',
+  typeSshPassword: '密码',
   typeRegistry: '镜像仓库',
 
   maskTitle: '掩码值（编辑中可查看明文）',
@@ -80,10 +80,10 @@ export default {
   secretOptionalEdit: '（留空则不轮换）',
   secretPlaceholderSshKey: '粘贴完整私钥(含 -----BEGIN/END----- 行)…',
   secretPlaceholderKeep: '留空保持当前密钥不变',
-  secretPlaceholderSshPassword: '输入 SSH 登录密码…',
+  secretPlaceholderSshPassword: '输入密码…',
   secretPlaceholderToken: '粘贴令牌内容…',
   secretPlaceholderGitHttp: '输入 Git HTTPS 密码或 Token…',
-  hintSshPassword: 'SSH 登录用户名在「登记服务器」时填写;此处仅存密码。写入后不可读出,仅展示掩码。',
+  hintSshPassword: '密码仅在此存储一次;写入后不可读出,仅展示掩码。可用于数据库密码、API 密钥等。',
   hintSecret: '密钥写入后不可读出，界面仅展示掩码值',
   hintGitHttp: '用于 Git HTTPS 登录：可填写账号密码，也可填写 Personal Access Token。写入后仅展示掩码。',
 

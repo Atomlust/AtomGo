@@ -119,7 +119,7 @@ export default {
   envDeployParamsHint: 'Scope: applied uniformly to all target servers of this environment, overriding the deploy_ssh node defaults for container name / ports. When deploying multiple environments on the same server, give each a different container name and host port, otherwise promotion overwrites same-named containers and collides on host ports.',
   envDeployParamsEmptyHint: 'Empty fallback: promotion derives the container name from the artifact name (same across environments, prone to conflict on one host) and publishes no host port (container unreachable externally). Fill these in for multi-environment / same-server deployments.',
   envContainerName: 'Container name',
-  envContainerNamePlaceholder: 'atomupdate-web',
+  envContainerNamePlaceholder: 'atomgo-web',
   envPorts: 'Port mappings',
   envPortsPlaceholder: '8001:8080',
   envRunArgs: 'Run args',

@@ -119,7 +119,7 @@ export default {
   envDeployParamsHint: '적용 범위: 이 환경의 모든 대상 서버에 균일하게 적용되며 deploy_ssh 노드의 기본 컨테이너 이름/포트를 재정의합니다. 동일 서버에 여러 환경을 배포할 때는 환경마다 다른 컨테이너 이름과 호스트 포트를 지정하세요. 그렇지 않으면 승격 시 동일 이름 컨테이너가 덮어씌워지고 호스트 포트가 충돌합니다.',
   envDeployParamsEmptyHint: '비워둘 경우: 승격 배포는 컨테이너 이름을 아티팩트 이름에서 자동 생성합니다(환경 간 동일하여 동일 호스트에서 충돌 위험)하며 호스트 포트를 게시하지 않습니다(외부에서 접근 불가). 다중 환경/동일 서버 배포에서는 반드시 입력하세요.',
   envContainerName: '컨테이너 이름',
-  envContainerNamePlaceholder: 'atomupdate-web',
+  envContainerNamePlaceholder: 'atomgo-web',
   envPorts: '포트 매핑',
   envPortsPlaceholder: '8001:8080',
   envRunArgs: '실행 인수',

@@ -38,7 +38,7 @@ export default {
   typeGitToken: 'Git 權杖',
   typeGitHttp: 'Git HTTPS',
   typeSshKey: 'SSH 私鑰',
-  typeSshPassword: 'SSH 密碼',
+  typeSshPassword: '密碼',
   typeRegistry: '映像倉庫',
 
   maskTitle: '遮罩值（編輯中可檢視明文）',
@@ -80,10 +80,10 @@ export default {
   secretOptionalEdit: '（留空則不輪換）',
   secretPlaceholderSshKey: '貼上完整私鑰(含 -----BEGIN/END----- 行)…',
   secretPlaceholderKeep: '留空則保持目前密鑰不變',
-  secretPlaceholderSshPassword: '輸入 SSH 登入密碼…',
+  secretPlaceholderSshPassword: '輸入密碼…',
   secretPlaceholderToken: '貼上權杖內容…',
   secretPlaceholderGitHttp: '輸入 Git HTTPS 密碼或 Token…',
-  hintSshPassword: 'SSH 登入使用者名稱於「登記伺服器」時填寫;此處僅存密碼。寫入後不可讀出,僅顯示遮罩。',
+  hintSshPassword: '密碼僅在此儲存一次;寫入後不可讀出,僅顯示遮罩。可用於資料庫密碼、API 金鑰等。',
   hintSecret: '密鑰寫入後不可讀出,介面僅顯示遮罩值',
   hintGitHttp: '用於 Git HTTPS 登入：可填寫帳號密碼，也可填寫 Personal Access Token。寫入後僅顯示遮罩。',
 

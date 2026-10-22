@@ -38,7 +38,7 @@ export default {
   typeGitToken: 'Token de Git',
   typeGitHttp: 'Git HTTPS',
   typeSshKey: 'Clave SSH',
-  typeSshPassword: 'Contraseña SSH',
+  typeSshPassword: 'Contraseña',
   typeRegistry: 'Registro',
 
   maskTitle: 'Valor enmascarado (puedes verlo al editar)',
@@ -80,10 +80,10 @@ export default {
   secretOptionalEdit: '(déjalo en blanco para no rotar)',
   secretPlaceholderSshKey: 'Pega la clave privada completa (incluidas las líneas -----BEGIN/END-----)…',
   secretPlaceholderKeep: 'Déjalo en blanco para mantener el secreto actual',
-  secretPlaceholderSshPassword: 'Introduce la contraseña de inicio de sesión SSH…',
+  secretPlaceholderSshPassword: 'Introduce la contraseña…',
   secretPlaceholderToken: 'Pega el contenido del token…',
   secretPlaceholderGitHttp: 'Introduce la contraseña o el token de Git HTTPS…',
-  hintSshPassword: 'El nombre de usuario de inicio de sesión SSH se indica al «registrar el servidor»; aquí solo se almacena la contraseña. No puede volver a leerse tras guardarla; solo se muestra el enmascarado.',
+  hintSshPassword: 'La contraseña se almacena una sola vez; tras guardarla no puede volver a leerse, solo se muestra el enmascarado. Úsala para contraseñas de base de datos, claves API, etc.',
   hintSecret: 'El secreto no puede volver a leerse tras guardarlo; la interfaz solo muestra el valor enmascarado',
   hintGitHttp: 'Para iniciar sesión en Git HTTPS: usa la contraseña de la cuenta o un Personal Access Token. Tras guardarlo solo se muestra la máscara.',
 
