@@ -14,6 +14,8 @@ export default {
   tableHeaderAria: 'Encabezado de la lista de ejecuciones',
   colStatus: 'Estado',
   colProject: 'Proyecto',
+  colEnvironment: 'Entorno',
+  promotionDeploy: 'Despliegue de promoción',
   colBranchCommit: 'Rama / Commit',
   colTrigger: 'Disparador',
   colDuration: 'Duración',

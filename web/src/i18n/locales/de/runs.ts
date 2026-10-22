@@ -14,6 +14,8 @@ export default {
   tableHeaderAria: 'Kopfzeile der Ausführungsliste',
   colStatus: 'Status',
   colProject: 'Projekt',
+  colEnvironment: 'Umgebung',
+  promotionDeploy: 'Promotions-Deployment',
   colBranchCommit: 'Branch / Commit',
   colTrigger: 'Auslöser',
   colDuration: 'Dauer',

@@ -14,6 +14,8 @@ export default {
   tableHeaderAria: 'En-tête de la liste des exécutions',
   colStatus: 'Statut',
   colProject: 'Projet',
+  colEnvironment: 'Environnement',
+  promotionDeploy: 'Déploiement par promotion',
   colBranchCommit: 'Branche / Commit',
   colTrigger: 'Déclencheur',
   colDuration: 'Durée',

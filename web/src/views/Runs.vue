@@ -341,6 +341,7 @@ function isFailedStatus(status: RunStatus): boolean {
         >
           <div class="skel skel--pill" />
           <div class="skel skel--name" />
+          <div class="skel skel--env" />
           <div class="skel skel--branch" />
           <div class="skel skel--trigger" />
           <div class="skel skel--dur" />
@@ -355,6 +356,7 @@ function isFailedStatus(status: RunStatus): boolean {
         >
           <div class="skel skel--pill" />
           <div class="skel skel--name" />
+          <div class="skel skel--env" />
           <div class="skel skel--branch" />
           <div class="skel skel--trigger" />
           <div class="skel skel--dur" />
@@ -396,6 +398,7 @@ function isFailedStatus(status: RunStatus): boolean {
         <div class="table-head" role="row" :aria-label="t('runs.tableHeaderAria')">
           <span class="th">{{ t('runs.colStatus') }}</span>
           <span class="th">{{ t('runs.colProject') }}</span>
+          <span class="th">{{ t('runs.colEnvironment') }}</span>
           <span class="th">{{ t('runs.colBranchCommit') }}</span>
           <span class="th">{{ t('runs.colTrigger') }}</span>
           <span class="th">{{ t('runs.colDuration') }}</span>
@@ -452,6 +455,12 @@ function isFailedStatus(status: RunStatus): boolean {
             <div class="col-project">
               <span class="project-name">{{ run.projectName }}</span>
               <span class="run-id mono">#{{ shortId(run.id) }}</span>
+            </div>
+
+            <!-- Environment (resolved deploy env; promotion runs flagged) -->
+            <div class="col-env">
+              <span class="env-name">{{ run.environment || '—' }}</span>
+              <span v-if="run.isPromotion" class="env-badge">{{ t('runs.promotionDeploy') }}</span>
             </div>
 
             <!-- Branch + commit -->
@@ -770,7 +779,7 @@ function isFailedStatus(status: RunStatus): boolean {
 
 .table-head {
   display: grid;
-  grid-template-columns: 110px 1fr 160px 120px 80px 90px 100px;
+  grid-template-columns: 110px 1fr 130px 160px 120px 80px 90px 100px;
   padding: 0 18px;
   height: 38px;
   align-items: center;
@@ -817,7 +826,7 @@ function isFailedStatus(status: RunStatus): boolean {
 .run-row {
   position: relative;
   display: grid;
-  grid-template-columns: 110px 1fr 160px 120px 80px 90px 100px;
+  grid-template-columns: 110px 1fr 130px 160px 120px 80px 90px 100px;
   padding: 0 18px;
   min-height: 52px;
   align-items: center;
@@ -944,6 +953,35 @@ function isFailedStatus(status: RunStatus): boolean {
   color: var(--color-faint);
 }
 
+/* ─── environment column ─────────────────────────────────────────────── */
+.col-env {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.env-badge {
+  flex-shrink: 0;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--color-primary);
+  background: var(--color-primary-soft);
+  border: 1px solid var(--color-primary-line, transparent);
+  border-radius: var(--rounded-md);
+  padding: 1px 6px;
+  white-space: nowrap;
+}
+
+.env-name {
+  font-size: 0.8rem;
+  color: var(--color-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .col-branch {
   display: flex;
   flex-direction: column;
@@ -1047,7 +1085,7 @@ function isFailedStatus(status: RunStatus): boolean {
 
 .skel-row {
   display: grid;
-  grid-template-columns: 110px 1fr 160px 120px 80px 90px;
+  grid-template-columns: 110px 1fr 130px 160px 120px 80px 90px;
   gap: 12px;
   padding: 12px 18px;
   border-bottom: 1px solid var(--color-border);
@@ -1078,6 +1116,7 @@ function isFailedStatus(status: RunStatus): boolean {
 
 .skel--pill    { height: 22px; width: 80px; }
 .skel--name    { height: 14px; width: 70%; }
+.skel--env     { height: 12px; width: 80px; }
 .skel--branch  { height: 12px; width: 90px; }
 .skel--trigger { height: 12px; width: 70px; }
 .skel--dur     { height: 12px; width: 50px; }

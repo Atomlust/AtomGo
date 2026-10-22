@@ -14,6 +14,8 @@ export default {
   tableHeaderAria: '実行一覧のヘッダー',
   colStatus: 'ステータス',
   colProject: 'プロジェクト',
+  colEnvironment: '環境',
+  promotionDeploy: '昇格デプロイ',
   colBranchCommit: 'ブランチ / コミット',
   colTrigger: 'トリガー方法',
   colDuration: '所要時間',

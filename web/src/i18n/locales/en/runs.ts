@@ -14,6 +14,8 @@ export default {
   tableHeaderAria: 'Run list header',
   colStatus: 'Status',
   colProject: 'Project',
+  colEnvironment: 'Environment',
+  promotionDeploy: 'Promotion',
   colBranchCommit: 'Branch / Commit',
   colTrigger: 'Trigger',
   colDuration: 'Duration',

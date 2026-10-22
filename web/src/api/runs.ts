@@ -172,6 +172,10 @@ export interface RunListItem {
   projectName: string
   status: RunStatus
   trigger: RunTrigger
+  /** 解析出的部署环境名(分支映射 / 晋级目标环境);空串 = 未解析。 */
+  environment: string
+  /** 是否为「环境晋级部署」记录。 */
+  isPromotion: boolean
   createdAt: string
   durationMs: number | null
 }

@@ -14,6 +14,8 @@ export default {
   tableHeaderAria: '실행 목록 헤더',
   colStatus: '상태',
   colProject: '프로젝트',
+  colEnvironment: '환경',
+  promotionDeploy: '승격 배포',
   colBranchCommit: '브랜치 / 커밋',
   colTrigger: '트리거 방식',
   colDuration: '소요 시간',

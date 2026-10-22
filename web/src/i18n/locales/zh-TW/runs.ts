@@ -14,6 +14,8 @@ export default {
   tableHeaderAria: '執行列表表頭',
   colStatus: '狀態',
   colProject: '專案',
+  colEnvironment: '環境',
+  promotionDeploy: '晉級部署',
   colBranchCommit: '分支 / Commit',
   colTrigger: '觸發方式',
   colDuration: '耗時',
