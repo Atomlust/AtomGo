@@ -435,6 +435,7 @@ func (s *service) List(ctx context.Context, f ListFilter) (*ListResult, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT pr.id, pr.project_id, COALESCE(p.name, ''), pr.status,
 		        pr.trigger_type, pr.trigger_branch, pr.trigger_commit, pr.trigger_actor,
+		        pr.resolved_environment, pr.chain_source_run_id,
 		        pr.created_at, pr.started_at, pr.finished_at
 		 FROM pipeline_runs pr
 		 LEFT JOIN projects p ON p.id = pr.project_id`+clause+`
@@ -455,6 +456,7 @@ func (s *service) List(ctx context.Context, f ListFilter) (*ListResult, error) {
 		)
 		if err := rows.Scan(&r.ID, &r.ProjectID, &r.ProjectName, &r.Status,
 			&r.Trigger.Type, &r.Trigger.Branch, &r.Trigger.Commit, &r.Trigger.Actor,
+			&r.Trigger.ResolvedEnvironment, &r.Trigger.ChainSourceRunID,
 			&createdStr, &startedStr, &finishStr); err != nil {
 			return nil, fmt.Errorf("run: scan run: %w", err)
 		}

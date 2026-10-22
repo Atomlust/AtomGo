@@ -58,6 +58,9 @@ type environmentDTO struct {
 	EnvVars         []buildVarDTO    `json:"envVars"`
 	ImageRegistry   imageRegistryDTO `json:"imageRegistry"`
 	ChannelTag      string           `json:"channelTag,omitempty"`
+	ContainerName   string           `json:"containerName,omitempty"`
+	Ports           string           `json:"ports,omitempty"`
+	RunArgs         string           `json:"runArgs,omitempty"`
 }
 
 // pipelineStepDTO 是一条自定义脚本步骤的契约 DTO(Epic 8 · Story 8-1;冻结)。
@@ -135,7 +138,10 @@ func toSettingsDTO(st *pipeline.Settings) settingsDTO {
 				CredentialID:     e.ImageRegistry.CredentialID,
 				MaskedCredential: e.ImageRegistry.MaskedCredential,
 			},
-			ChannelTag: e.ChannelTag,
+			ChannelTag:    e.ChannelTag,
+			ContainerName: e.ContainerName,
+			Ports:         e.Ports,
+			RunArgs:       e.RunArgs,
 		})
 	}
 
@@ -246,7 +252,10 @@ func makeSavePipelineSettingsHandler(svc pipeline.SettingsService) http.HandlerF
 					URL          string `json:"url"`
 					CredentialID string `json:"credentialId"`
 				} `json:"imageRegistry"`
-				ChannelTag string `json:"channelTag"`
+				ChannelTag    string `json:"channelTag"`
+				ContainerName string `json:"containerName"`
+				Ports         string `json:"ports"`
+				RunArgs       string `json:"runArgs"`
 			} `json:"environments"`
 			Steps []struct {
 				ID       string   `json:"id"`
@@ -291,7 +300,10 @@ func makeSavePipelineSettingsHandler(svc pipeline.SettingsService) http.HandlerF
 					URL:          e.ImageRegistry.URL,
 					CredentialID: e.ImageRegistry.CredentialID,
 				},
-				ChannelTag: e.ChannelTag,
+				ChannelTag:    e.ChannelTag,
+				ContainerName: e.ContainerName,
+				Ports:         e.Ports,
+				RunArgs:       e.RunArgs,
 			})
 		}
 

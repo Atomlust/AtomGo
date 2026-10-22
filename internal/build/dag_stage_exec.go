@@ -665,7 +665,8 @@ func (b *Builder) runDeployJob(ctx context.Context, rep dagrun.StageReporter, jb
 	// 把目标机真实执行的命令 + stdout/stderr 实时回流到本部署步骤日志(脱敏由 sink 侧 Masker 兜底)。
 	dctx := deploy.WithCmdLog(ctx, func(stream, text string) { _ = rep.Log(ctx, stream, text) })
 	// 环境作用域变量解析 + 挂载(见函数注释):镜像产物最终以 --env-file 注入容器。
-	if envName := strings.TrimSpace(r.Trigger.ResolvedEnvironment); envName != "" {
+	envName := strings.TrimSpace(r.Trigger.ResolvedEnvironment)
+	if envName != "" {
 		vars, unresolved, rerr := b.resolveEnvVars(ctx, r.ProjectID, envName)
 		if rerr != nil {
 			_ = rep.Log(ctx, streamStderr, fmt.Sprintf("环境「%s」变量解析失败:%s", envName, rerr.Error()))
@@ -677,6 +678,23 @@ func (b *Builder) runDeployJob(ctx context.Context, rep dagrun.StageReporter, jb
 		if len(vars) > 0 {
 			dctx = deploy.WithEnvFile(dctx, vars)
 			_ = rep.Log(ctx, streamStdout, fmt.Sprintf("→ 注入 %d 个环境变量(环境「%s」作用域;文件产物落 .env,镜像产物经 --env-file)", len(vars), envName))
+		}
+	}
+	// 容器名兜底:SSH 卡片未填 containerName 时,回退到映射环境的默认 ContainerName
+	// (与「环境与凭据」卡片「本环境部署以该名起容器」语义一致;否则 imageContainerName
+	// 会退化为产物名 sanitize / "app",丢失「同机多环境不同容器名共存」隔离)。
+	if strings.TrimSpace(cfg["containerName"]) == "" && envName != "" && b.settings != nil {
+		if st, serr := b.settings.Get(ctx, r.ProjectID); serr == nil {
+			for _, e := range st.Environments {
+				if e.Name == envName {
+					if cn := strings.TrimSpace(e.ContainerName); cn != "" {
+						cfg["containerName"] = cn
+						_ = rep.Log(ctx, streamStdout,
+							fmt.Sprintf("· 部署容器名回退至环境「%s」默认容器名:%s", envName, cn))
+					}
+					break
+				}
+			}
 		}
 	}
 	run.RecordExecution(rep, run.ExecutionReal)

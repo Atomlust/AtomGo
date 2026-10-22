@@ -78,8 +78,12 @@ type runListItemDTO struct {
 	ProjectName string      `json:"projectName"`
 	Status      string      `json:"status"`
 	Trigger     triggerInfo `json:"trigger"`
-	CreatedAt   string      `json:"createdAt"`
-	DurationMs  *int64      `json:"durationMs"`
+	// Environment 是本次运行解析出的部署环境名(分支映射 / 晋级目标环境);空 = 未解析。
+	Environment string `json:"environment"`
+	// IsPromotion 标记本次运行是一条「环境晋级部署」记录(源 run 产物部署到目标环境)。
+	IsPromotion bool   `json:"isPromotion"`
+	CreatedAt   string `json:"createdAt"`
+	DurationMs  *int64 `json:"durationMs"`
 }
 
 type runListDTO struct {
@@ -164,12 +168,17 @@ func toRunDetailDTO(r *run.Run, artifacts []run.Artifact, targets []run.DeployTa
 }
 
 func toRunListItemDTO(r *run.Run) runListItemDTO {
+	// 晋级部署记录经 CreatePromotionDeployRun 创建:branch 恒为空且 chain_source_run_id
+	// 指向源 run(普通串联触发的 branch 必非空)。二者组合即可可靠区分晋级部署,无需新列。
+	isPromotion := r.Trigger.ChainSourceRunID != "" && r.Trigger.Branch == ""
 	return runListItemDTO{
 		ID:          r.ID,
 		ProjectID:   r.ProjectID,
 		ProjectName: r.ProjectName,
 		Status:      r.Status,
 		Trigger:     toTriggerInfo(r.Trigger),
+		Environment: r.Trigger.ResolvedEnvironment,
+		IsPromotion: isPromotion,
 		CreatedAt:   r.CreatedAt.UTC().Format(time.RFC3339),
 		DurationMs:  durationMs(r.StartedAt, r.FinishedAt),
 	}
